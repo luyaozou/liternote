@@ -15,6 +15,7 @@ __pycache__/
 */test/trial/*
 */test/unit/unit_test*.db
 */test/unit/unit_test*.cat
+test_*.py
 
 # C extensions
 *.so

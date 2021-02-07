@@ -14,6 +14,9 @@ import sys
 
 ROOT = dirname(realpath(__file__))
 
+COLOR_BLUE = '#0066cc'
+COLOR_RED = '#cc0000'
+
 
 class MainWindow(QtWidgets.QMainWindow):
 
@@ -37,9 +40,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dialogDelImg.accepted.connect(self.del_img)
         self.dialogSearch.btnSearch.clicked.connect(self.search_fulltext)
         self.dialogSearch.btnLoad.clicked.connect(self.load_entry_fulltext)
+        self.dialogSearch.btnSelTags.clicked.connect(self.select_search_tags)
         self.dialogBibKey.btnSearch.clicked.connect(self.search_bibkey)
         self.dialogBibKey.btnLoad.clicked.connect(self.load_entry_bibkey)
         self.dialogPatchKey.btnOk.clicked.connect(self.check_patchkey)
+        self.dialogPickSearchTags = DialogMultiTag(color=COLOR_BLUE, parent=self)
+        self.dialogPickDelTags = DialogMultiTag(color=COLOR_RED, parent=self)
 
         toolBar = ToolBar(parent=self)
         self.addToolBar(toolBar)
@@ -52,12 +58,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.mw = MainWidget(parent=self)
         self.setCentralWidget(self.mw)
+        self.mw.tagBox.btnDel.clicked.connect(self.tagbox_del_tag)
+        self.mw.tagBox.btnAdd.clicked.connect(self.tagbox_add_tag)
 
         self.clipboard = QtWidgets.QApplication.clipboard()
         self.clipboard.dataChanged.connect(self.clipboardChanged)
 
         # load the last entry
-        self.mw.loadEntry(db_select_last_entry(self.cursor))
+        self.mw.loadEntry(*db_select_last_entry(self.cursor))
+        self.refresh_all_tags()
 
     def clipboardChanged(self):
         img = self.clipboard.image()
@@ -75,25 +84,59 @@ class MainWindow(QtWidgets.QMainWindow):
         self.conn.close()
         ev.accept()
 
+    def refresh_all_tags(self):
+        # refresh the tag list
+        all_tags = db_query_all_tags(self.cursor)
+        self.dialogPickSearchTags.setTags(all_tags)
+        self.mw.tagBox.comboTags.clear()
+        self.mw.tagBox.comboTags.addItems(all_tags)
+
+    def tagbox_add_tag(self):
+        """ Add a tag to the current tagbox """
+        newtag = self.mw.tagBox.comboTags.currentText()
+        if newtag.strip():
+            self.mw.tagBox.dispTags.addTag(newtag)
+
+    def tagbox_del_tag(self):
+        """ Remove tags in the current tagbox """
+        current_tags = self.mw.tagBox.dispTags.tags()
+        self.dialogPickDelTags.setTags(current_tags)
+        self.dialogPickDelTags.exec()
+        if self.dialogPickDelTags.result():
+            tags_to_del = self.dialogPickDelTags.getSelectedTags()
+            for tag in tags_to_del:
+                current_tags.remove(tag)
+            self.mw.tagBox.dispTags.setTags(current_tags)
+
+    def select_search_tags(self):
+        self.dialogPickSearchTags.exec()
+        if self.dialogPickSearchTags.result():
+            n = self.dialogPickSearchTags.getSelectedNum()
+            self.dialogSearch.btnSelTags.setText('{:d} tags'.format(n))
+
     def add_new_entry(self):
         # before add new entry, save the current one
         self.save_entry()
         self.mw.clear_all()
 
     def save_entry(self):
-        entry_dict = self.mw.getEntry()
+        entry_dict, tags = self.mw.getEntry()
         # check if bibkey is empty
         if entry_dict['bibkey']:
             save_img_to_disk(entry_dict['bibkey'], self.mw.gpImage.get_list_img())
             id_ = db_bibkey_id(self.cursor, entry_dict['bibkey'])
             if id_:     # bibkey already exists
                 try:
-                    db_update_entry(self.conn, self.cursor, id_, entry_dict)
+                    db_update_entry(self.conn, self.cursor, id_, entry_dict,
+                                    tags=tags)
+                    self.refresh_all_tags()
                 except sqlite3.Error as err:
                     msg(title='Error', style='critical', context=str(err))
             else:
                 try:
-                    db_insert_entry(self.conn, self.cursor, entry_dict)
+                    db_insert_entry(self.conn, self.cursor, entry_dict,
+                                    tags=tags)
+                    self.refresh_all_tags()
                 except sqlite3.Error as err:
                     msg(title='Error', style='critical', context=str(err))
         else:
@@ -132,6 +175,7 @@ class MainWindow(QtWidgets.QMainWindow):
             bibkeys = db_search_bibkey(self.cursor, keyword)
             self.dialogBibKey.listEntry.clear()
             self.dialogBibKey.listEntry.addItems(bibkeys)
+            self.dialogBibKey.listEntry.setCurrentRow(0)
         else:
             self.dialogBibKey.listEntry.clear()
 
@@ -140,32 +184,43 @@ class MainWindow(QtWidgets.QMainWindow):
         genre = self.dialogSearch.comboGenre.currentText()
         keyword = self.dialogSearch.inpSearchWord.text()
         if keyword:
-            bibkeys = db_search_fulltext(self.cursor, field, genre, keyword)
+            selected_tags = self.dialogPickSearchTags.getSelectedTags()
+            bibkeys = db_search_fulltext(self.cursor, field, genre, keyword,
+                                         tags=selected_tags)
             self.dialogSearch.listEntry.clear()
             self.dialogSearch.listEntry.addItems(bibkeys)
+            self.dialogSearch.listEntry.setCurrentRow(0)
         else:
             self.dialogSearch.listEntry.clear()
 
     def load_entry_fulltext(self):
-        # save current entry
+        # load an entry from fulltext search
         self.save_entry()
-        bibkey = self.dialogSearch.listEntry.currentItem().text()
-        a_dict = db_select_entry(self.cursor, bibkey)
-        self.mw.loadEntry(a_dict)
+        try:    # avoid query empty stuff
+            bibkey = self.dialogSearch.listEntry.currentItem().text()
+            a_dict, tags = db_select_entry(self.cursor, bibkey)
+            self.mw.loadEntry(a_dict, tags)
+            self.dialogPickDelTags.setTags(tags)
+        except AttributeError:
+            pass
 
     def load_entry_bibkey(self):
-        # save current entry
+        # load an entry from bibkey search
         self.save_entry()
-        bibkey = self.dialogBibKey.listEntry.currentItem().text()
-        a_dict = db_select_entry(self.cursor, bibkey)
-        self.mw.loadEntry(a_dict)
+        try:    # avoid query empty stuff
+            bibkey = self.dialogBibKey.listEntry.currentItem().text()
+            a_dict, tags = db_select_entry(self.cursor, bibkey)
+            self.mw.loadEntry(a_dict, tags)
+            self.dialogPickDelTags.setTags(tags)
+        except AttributeError:
+            pass
 
 
 class DialogSearch(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(750)
         self.setWindowTitle('Search Entries')
         self.setWindowFlags(QtCore.Qt.Window)
 
@@ -178,17 +233,24 @@ class DialogSearch(QtWidgets.QDialog):
         self.comboFields.setFixedWidth(120)
         self.comboGenre = QtWidgets.QComboBox()
         self.comboGenre.addItems(
-                ['ALL', 'Theory', 'Experiment', 'Instrum', 'Review']
+                ['ALL', 'Code', 'Experiment', 'Instrum', 'Theory', 'Review']
         )
         self.comboGenre.setFixedWidth(120)
+        self.btnSelTags = QtWidgets.QPushButton('0 tags')
+        self.btnSelTags.setFixedWidth(120)
 
         self.btnSearch.setFixedWidth(100)
         self.inpSearchWord = QtWidgets.QLineEdit()
-        barLayout = QtWidgets.QHBoxLayout()
-        barLayout.addWidget(self.comboFields)
-        barLayout.addWidget(self.comboGenre)
-        barLayout.addWidget(self.inpSearchWord)
-        barLayout.addWidget(self.btnSearch)
+        barLayout = QtWidgets.QGridLayout()
+        barLayout.addWidget(QtWidgets.QLabel('Fields'), 0, 0)
+        barLayout.addWidget(self.comboFields, 1, 0)
+        barLayout.addWidget(QtWidgets.QLabel('Genre'), 0, 1)
+        barLayout.addWidget(self.comboGenre, 1, 1)
+        barLayout.addWidget(QtWidgets.QLabel('Tags'), 0, 2)
+        barLayout.addWidget(self.btnSelTags, 1, 2)
+        barLayout.addWidget(QtWidgets.QLabel('Search Word'), 0, 3)
+        barLayout.addWidget(self.inpSearchWord, 1, 3)
+        barLayout.addWidget(self.btnSearch, 1, 4)
 
         self.listEntry = QtWidgets.QListWidget()
         self.listEntry.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
@@ -340,6 +402,7 @@ class DialogDelImg(QtWidgets.QDialog):
 
 
 class DialogPatchBibkey(QtWidgets.QDialog):
+    """ Prevent user to save with blank bibkey"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -367,12 +430,13 @@ class MainWidget(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.inpBibKey = QtWidgets.QLineEdit()
+        self.tagBox = TagBox(parent=self)
         self.editAuthor = QtWidgets.QTextEdit()
         self.editAuthor.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
         self.editAuthor.setWordWrapMode(QTextOption.WordWrap)
         self.comboGenre = QtWidgets.QComboBox()
-        self.comboGenre.addItems(['Theory', 'Experiment', 'Instrum', 'Review'])
-        self.comboGenre.setFixedWidth(100)
+        self.comboGenre.addItems(['Code', 'Experiment', 'Instrum', 'Theory', 'Review'])
+        self.comboGenre.setFixedWidth(120)
         self.editThesis = QtWidgets.QTextEdit()
         self.editThesis.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
         self.editThesis.setWordWrapMode(QTextOption.WordWrap)
@@ -422,20 +486,21 @@ class MainWidget(QtWidgets.QWidget):
         thisLayout = QtWidgets.QGridLayout()
         thisLayout.setAlignment(QtCore.Qt.AlignTop)
         thisLayout.addLayout(topLayout, 0, 0, 1, 4)
-        thisLayout.addWidget(QtWidgets.QLabel('Author'), 1, 0)
-        thisLayout.addWidget(QtWidgets.QLabel('Thesis'), 1, 1)
-        thisLayout.addWidget(QtWidgets.QLabel('Hypothesis'), 1, 2)
-        thisLayout.addWidget(areaAuthor, 2, 0)
-        thisLayout.addWidget(areaThesis, 2, 1)
-        thisLayout.addWidget(areaHypo, 2, 2)
-        thisLayout.addWidget(QtWidgets.QLabel('Method'), 3, 0)
-        thisLayout.addWidget(QtWidgets.QLabel('Finding'), 3, 1)
-        thisLayout.addWidget(QtWidgets.QLabel('Comment'), 3, 2)
-        thisLayout.addWidget(areaMethod, 4, 0)
-        thisLayout.addWidget(areaFinding, 4, 1)
-        thisLayout.addWidget(areaComment, 4, 2)
-        thisLayout.addWidget(QtWidgets.QLabel('Images'), 1, 3)
-        thisLayout.addWidget(areaImg, 2, 3, 3, 1)
+        thisLayout.addWidget(self.tagBox, 1, 0, 1, 4)
+        thisLayout.addWidget(QtWidgets.QLabel('Author'), 2, 0)
+        thisLayout.addWidget(QtWidgets.QLabel('Thesis'), 2, 1)
+        thisLayout.addWidget(QtWidgets.QLabel('Hypothesis'), 2, 2)
+        thisLayout.addWidget(areaAuthor, 3, 0)
+        thisLayout.addWidget(areaThesis, 3, 1)
+        thisLayout.addWidget(areaHypo, 3, 2)
+        thisLayout.addWidget(QtWidgets.QLabel('Method'), 4, 0)
+        thisLayout.addWidget(QtWidgets.QLabel('Finding'), 4, 1)
+        thisLayout.addWidget(QtWidgets.QLabel('Comment'), 4, 2)
+        thisLayout.addWidget(areaMethod, 5, 0)
+        thisLayout.addWidget(areaFinding, 5, 1)
+        thisLayout.addWidget(areaComment, 5, 2)
+        thisLayout.addWidget(QtWidgets.QLabel('Images'), 2, 3)
+        thisLayout.addWidget(areaImg, 3, 3, 3, 1)
         self.setLayout(thisLayout)
 
     def clear_all(self):
@@ -448,6 +513,7 @@ class MainWidget(QtWidgets.QWidget):
         self.editMethod.clear()
         self.editAuthor.clear()
         self.gpImage.clear()
+        self.tagBox.dispTags.setTags([])
 
     def getEntry(self):
         """ Get entry information """
@@ -462,9 +528,10 @@ class MainWidget(QtWidgets.QWidget):
             'comment': self.editComment.toPlainText(),
             'img_linkstr': self.gpImage.get_link_str()
         }
-        return a_dict
+        tags = self.tagBox.dispTags.tags()
+        return a_dict, tags
 
-    def loadEntry(self, a_dict):
+    def loadEntry(self, a_dict, tags):
         """ Load entry information """
         self.inpBibKey.setText(a_dict['bibkey'])
         self.comboGenre.setCurrentText(a_dict['genre'])
@@ -475,6 +542,7 @@ class MainWidget(QtWidgets.QWidget):
         self.editFinding.setText(a_dict['finding'])
         self.editComment.setText(a_dict['comment'])
         self.gpImage.load_imgs_from_disk(a_dict['img_linkstr'])
+        self.tagBox.dispTags.setTags(tags)
 
 
 class GroupImageInDialog(QtWidgets.QWidget):
@@ -633,6 +701,192 @@ class ToolBar(QtWidgets.QToolBar):
         self.setIconSize(QtCore.QSize(40, 40))
 
 
+class TagLabel(QtWidgets.QLabel):
+    """ Reimplement QLable to display tags """
+
+    def __init__(self, color, title='', parent=None):
+        super().__init__(parent)
+        self.setText(title)
+        self.setStyleSheet("""border-style: solid;
+                              border-width: 2px;
+                              border-radius: 4px;
+                              border-color: {:s};
+                              padding: 1px;
+                           """.format(color))
+
+
+class TagBtn(QtWidgets.QPushButton):
+    """ Reimplement toggled button to display selected tags """
+
+    def __init__(self, color, title='', parent=None):
+        super().__init__(parent)
+
+        self._color = color
+        self.setText(title)
+        self.setCheckable(True)
+        self.setChecked(False)
+        self.setStatus(False)
+        self.toggled[bool].connect(self.setStatus)
+
+    def setStatus(self, b):
+        """ Set color by bool """
+
+        if b:    # toggled
+            self.setStyleSheet("""border-style: solid;
+                                  border-width: 2px;
+                                  border-radius: 4px;
+                                  border-color: {:s};
+                                  padding: 1px;
+                               """.format(self._color))
+        else:   # untoggled
+            self.setStyleSheet("""border-style: none;
+                                  padding: 3px;
+                               """)
+
+
+class TagBox(QtWidgets.QWidget):
+    """ Custom widget to hold tag addition / removal in the main GUI """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.btnAdd = QtWidgets.QPushButton('Add Tag')
+        self.btnDel = QtWidgets.QPushButton('Remove Tag')
+        self.comboTags = QtWidgets.QComboBox()
+        self.editNewTag = QtWidgets.QLineEdit()
+        self.comboTags.setLineEdit(self.editNewTag)
+        self.dispTags = DispTags1Row(COLOR_BLUE, parent=self)
+
+        thisLayout = QtWidgets.QHBoxLayout()
+        thisLayout.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        thisLayout.addWidget(self.comboTags)
+        thisLayout.addWidget(self.btnAdd)
+        thisLayout.addWidget(self.btnDel)
+        thisLayout.addWidget(self.dispTags)
+        self.setLayout(thisLayout)
+
+
+class DispTags1Row(QtWidgets.QWidget):
+    """ 1-row widget to display tags. no interaction """
+
+    def __init__(self, color, parent=None):
+        super().__init__(parent)
+
+        self._color = color
+        self._layout = QtWidgets.QGridLayout()
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setAlignment(QtCore.Qt.AlignLeft)
+        self.setLayout(self._layout)
+        self._list_widgets = []
+
+    def setTags(self, tags):
+
+        n_tag = len(tags)
+        n_wdg = len(self._list_widgets)
+        if n_tag > n_wdg:
+            for tag, wdg in zip(tags[:n_wdg], self._list_widgets):
+                wdg.setText(tag)
+            for i, tag in enumerate(tags[n_wdg:]):
+                wdg = TagLabel(self._color, title=tag)
+                self._list_widgets.append(wdg)
+                self._layout.addWidget(wdg, 0, i+n_wdg)
+        else:
+            for tag, wdg in zip(tags, self._list_widgets[:n_tag]):
+                wdg.setText(tag)
+            for i in range(n_tag, n_wdg):
+                wdg = self._list_widgets.pop()
+                self._layout.removeWidget(wdg)
+                wdg.deleteLater()
+
+    def addTag(self, tag):
+        """ Add one tag """
+        if tag not in self.tags():  # avoid duplicates
+            wdg = TagLabel(self._color, title=tag)
+            self._layout.addWidget(wdg, 0, self._layout.columnCount())
+            self._list_widgets.append(wdg)
+
+    def tags(self):
+        return list(wdg.text() for wdg in self._list_widgets)
+
+
+class DialogMultiTag(QtWidgets.QDialog):
+    """ Dialog window for multiple selection of tags """
+
+    cols = 5     # 5 tags in 1 column
+
+    def __init__(self, color='#0066cc', parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Select Tags')
+        self.setMinimumWidth(500)
+
+        self._color = color
+        self._list_widgets = []
+        self._layout = QtWidgets.QGridLayout()
+        self._layout.setAlignment(QtCore.Qt.AlignTop)
+        central_widget = QtWidgets.QWidget()
+        central_widget.setLayout(self._layout)
+
+        area = QtWidgets.QScrollArea()
+        area.setWidgetResizable(True)
+        area.setWidget(central_widget)
+
+        btnBox = QtWidgets.QDialogButtonBox()
+        btnBox.addButton(QtWidgets.QDialogButtonBox.Cancel)
+        btnBox.addButton(QtWidgets.QDialogButtonBox.Ok)
+        btnBox.addButton(QtWidgets.QDialogButtonBox.Reset)
+
+        thisLayout = QtWidgets.QVBoxLayout()
+        thisLayout.setAlignment(QtCore.Qt.AlignTop)
+        thisLayout.addWidget(area)
+        thisLayout.addWidget(btnBox)
+        self.setLayout(thisLayout)
+
+        btnBox.accepted.connect(self.accept)
+        btnBox.rejected.connect(self.reject)
+        btnBox.clicked[QtWidgets.QAbstractButton].connect(self.reset)
+
+    def reset(self, obj):
+        if obj.text() == 'Reset':
+            for wdg in self._list_widgets:
+                wdg.setChecked(False)
+
+    def setTags(self, tags):
+
+        n_tag = len(tags)
+        n_wdg = len(self._list_widgets)
+        if n_tag > n_wdg:
+            for tag, wdg in zip(tags[:n_wdg], self._list_widgets):
+                wdg.setText(tag)
+            for i, tag in enumerate(tags[n_wdg:]):
+                wdg = TagBtn(self._color, title=tag)
+                self._list_widgets.append(wdg)
+                row = (i + n_wdg) // self.cols
+                col = (i + n_wdg) % self.cols
+                self._layout.addWidget(wdg, row, col)
+        else:
+            for tag, wdg in zip(tags, self._list_widgets[:n_tag]):
+                wdg.setText(tag)
+            for i in range(n_tag, n_wdg):
+                wdg = self._list_widgets.pop()
+                self._layout.removeWidget(wdg)
+                wdg.deleteLater()
+
+    def getSelectedTags(self):
+
+        a_list = []
+        for wdg in self._list_widgets:
+            if wdg.isChecked():
+                a_list.append(wdg.text())
+        return a_list
+
+    def getSelectedNum(self):
+        i = 0
+        for wdg in self._list_widgets:
+            if wdg.isChecked():
+                i += 1
+        return i
+
+
 def msg(title='', context='', style=''):
     """ Pop up a message box for information / warning
     :argument
@@ -691,6 +945,12 @@ def create_or_open_db(filename):
         img_linkstr TEXT
     );"""
     cursor.execute(sql)
+    
+    sql = """ CREATE TABLE IF NOT EXISTS tags (
+        bibkey TEXT NOT NULL,
+        tag TEXT NOT NULL
+    );"""
+    cursor.execute(sql)
 
     # create fts5 virtual table for full text search
     sql = """ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
@@ -734,7 +994,7 @@ def create_or_open_db(filename):
     return conn, cursor
 
 
-def db_insert_entry(conn, c, entry_dict):
+def db_insert_entry(conn, c, entry_dict, tags=None):
     """ Insert new entry into database """
 
     fields = ['bibkey', 'author', 'genre', 'thesis', 'hypothesis',
@@ -744,8 +1004,13 @@ def db_insert_entry(conn, c, entry_dict):
     c.execute(sql, tuple(entry_dict[field] for field in fields))
     conn.commit()
 
+    if tags:
+        sql = """ INSERT INTO tags (bibkey, tag) VALUES ({:s}, ?) """.format(entry_dict['bibkey'])
+        c.executemany(sql, ((tag,) for tag in tags))
+        conn.commit()
 
-def db_update_entry(conn, c, id_, entry_dict):
+
+def db_update_entry(conn, c, id_, entry_dict, tags=None):
     """ Update entry in database """
 
     fields = ['author', 'genre', 'thesis', 'hypothesis',
@@ -754,6 +1019,14 @@ def db_update_entry(conn, c, id_, entry_dict):
             """.format(','.join('{:s} = (?)'.format(field) for field in fields))
     c.execute(sql, tuple(list(entry_dict[field] for field in fields) + [id_]))
     conn.commit()
+
+    # remove old tags
+    c.execute("DELETE FROM tags WHERE bibkey = (?)", (entry_dict['bibkey'],))
+    if tags:
+        # write in new tags
+        sql = """ INSERT INTO tags (bibkey, tag) VALUES ('{:s}', ?) """.format(entry_dict['bibkey'])
+        c.executemany(sql, ((tag,) for tag in tags))
+        conn.commit()
 
 
 def db_bibkey_id(c, bibkey):
@@ -780,7 +1053,16 @@ def db_select_last_entry(c):
     else:
         for field in fields:
             a_dict[field] = ''
-    return a_dict
+
+    # get tags
+    if a_dict:
+        c.execute("SELECT tag FROM tags WHERE bibkey = (?) ORDER BY tag ASC",
+                  (a_dict['bibkey'], ))
+        tags = tuple(r[0] for r in c.fetchall())
+    else:
+        tags = ()
+
+    return a_dict, tags
 
 
 def db_select_entry(c, bibkey):
@@ -798,16 +1080,27 @@ def db_select_entry(c, bibkey):
     a_dict = {}
     for field, value in zip(fields, result):
         a_dict[field] = value
-    return a_dict
+    c.execute("SELECT tag FROM tags WHERE bibkey = (?) ORDER BY tag ASC",
+              (a_dict['bibkey'],))
+    tags = tuple(r[0] for r in c.fetchall())
+    return a_dict, tags
 
 
-def db_search_fulltext(c, field, genre, keyword):
+def db_query_all_tags(c):
+    """ Query all tags """
+
+    c.execute("SELECT DISTINCT tag FROM tags ORDER BY tag ASC")
+    return tuple(r[0] for r in c.fetchall())
+
+
+def db_search_fulltext(c, field, genre, keyword, tags=None):
     """ Query bibkeys that matches fields with keyword
     :argument
         c: sqlite3 cursor
         field: str
         genre: str
         keyword: str
+        tags: list of strings
     :returns
         bibkeys: list of matched bibkeys
     """
@@ -816,15 +1109,37 @@ def db_search_fulltext(c, field, genre, keyword):
     else:
         genre_cond = " genre = '{:s}' AND ".format(genre)
 
-    if field == 'ALL':
-        all_fields = '{author thesis hypothesis method finding comment}'
-        sql = """ SELECT bibkey FROM note WHERE {:s} id IN 
-        (SELECT rowid FROM fts WHERE fts MATCH '{:s}: {:s}' ORDER BY RANK DESC)
-        """.format(genre_cond, all_fields, keyword)
+    if tags:
+        tag_str = ", ".join(list("'{:s}'".format(t) for t in tags))
+        if field == 'ALL':
+            all_fields = '{author thesis hypothesis method finding comment}'
+            sql = """ SELECT DISTINCT note.bibkey FROM note 
+            JOIN tags ON note.bibkey = tags.bibkey
+            WHERE {:s} id IN 
+            (SELECT rowid FROM fts WHERE fts MATCH '{:s}: {:s}' ORDER BY RANK DESC)
+            AND tags.tag IN ({:s})
+            ORDER BY note.bibkey ASC
+            """.format(genre_cond, all_fields, keyword, tag_str)
+        else:
+            sql = """ SELECT DISTINCT note.bibkey FROM note
+            JOIN tags ON note.bibkey = tags.bibkey 
+            WHERE {:s} id IN 
+            (SELECT rowid FROM fts WHERE {:s} MATCH '{:s}' ORDER BY RANK DESC)
+            AND tags.tag IN ({:s})
+            ORDER BY note.bibkey ASC
+            """.format(genre_cond, field, keyword, tag_str)
     else:
-        sql = """ SELECT bibkey FROM note WHERE {:s} id IN 
-        (SELECT rowid FROM fts WHERE {:s} MATCH '{:s}' ORDER BY RANK DESC)
-        """.format(genre_cond, field, keyword)
+        if field == 'ALL':
+            all_fields = '{author thesis hypothesis method finding comment}'
+            sql = """ SELECT bibkey FROM note WHERE {:s} id IN 
+            (SELECT rowid FROM fts WHERE fts MATCH '{:s}: {:s}' ORDER BY RANK DESC)
+            ORDER BY bibkey ASC
+            """.format(genre_cond, all_fields, keyword)
+        else:
+            sql = """ SELECT bibkey FROM note WHERE {:s} id IN 
+            (SELECT rowid FROM fts WHERE {:s} MATCH '{:s}' ORDER BY RANK DESC)
+            ORDER BY bibkey ASC
+            """.format(genre_cond, field, keyword)
 
     c.execute(sql)
     return list(res[0] for res in c.fetchall())
@@ -839,7 +1154,8 @@ def db_search_bibkey(c, keyword):
         bibkeys: list of matched bibkeys
     """
 
-    sql = """ SELECT bibkey FROM note WHERE like('%{:s}%', bibkey) """.format(keyword)
+    sql = """ SELECT bibkey FROM note WHERE like('%{:s}%', bibkey) 
+    ORDER BY bibkey ASC """.format(keyword)
     c.execute(sql)
     return list(res[0] for res in c.fetchall())
 
