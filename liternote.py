@@ -75,11 +75,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, ev):
         # ask if save the last operation
-        context = 'Save the current entry content?'
-        q = QtWidgets.QMessageBox.question(self, 'Save?', context,
-                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                                           QtWidgets.QMessageBox.Yes)
-        if q == QtWidgets.QMessageBox.Yes:
+        if q_save_entry(self):
             self.save_entry()
         self.conn.close()
         ev.accept()
@@ -115,8 +111,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.dialogSearch.btnSelTags.setText('{:d} tags'.format(n))
 
     def add_new_entry(self):
-        # before add new entry, save the current one
-        self.save_entry()
+        # before add new entry, ask if save the current one
+        if q_save_entry(self):
+            self.save_entry()
+        self.mw.inpBibKey.setEnabled(True)
         self.mw.clear_all()
 
     def save_entry(self):
@@ -167,7 +165,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def view_img(self):
         self.dialogViewImg.load_imgs(self.mw.gpImage.get_list_img())
-        self.dialogViewImg.showNormal()
+        self.dialogViewImg.showMaximized()
 
     def search_bibkey(self):
         keyword = self.dialogBibKey.inpSearchWord.text().strip()
@@ -194,26 +192,42 @@ class MainWindow(QtWidgets.QMainWindow):
             self.dialogSearch.listEntry.clear()
 
     def load_entry_fulltext(self):
-        # load an entry from fulltext search
-        self.save_entry()
-        try:    # avoid query empty stuff
-            bibkey = self.dialogSearch.listEntry.currentItem().text()
-            a_dict, tags = db_select_entry(self.cursor, bibkey)
-            self.mw.loadEntry(a_dict, tags)
-            self.dialogPickDelTags.setTags(tags)
-        except AttributeError:
+        """  load an entry from fulltext search """
+        # compare the current bibkey entry and the one to be loaded
+        current_bibkey = self.mw.inpBibKey.text().strip()
+        load_bibkey = self.dialogSearch.listEntry.currentItem().text()
+        # do nothing, because the bibkey is already loaded
+        if current_bibkey == load_bibkey:
             pass
+        else:  # ask if need to save the current bibkey item
+            if q_save_entry(self):
+                self.save_entry()
+            try:  # avoid query empty stuff
+                bibkey = self.dialogSearch.listEntry.currentItem().text()
+                a_dict, tags = db_select_entry(self.cursor, bibkey)
+                self.mw.loadEntry(a_dict, tags)
+                self.dialogPickDelTags.setTags(tags)
+            except AttributeError:
+                pass
 
     def load_entry_bibkey(self):
-        # load an entry from bibkey search
-        self.save_entry()
-        try:    # avoid query empty stuff
-            bibkey = self.dialogBibKey.listEntry.currentItem().text()
-            a_dict, tags = db_select_entry(self.cursor, bibkey)
-            self.mw.loadEntry(a_dict, tags)
-            self.dialogPickDelTags.setTags(tags)
-        except AttributeError:
+        """ load an entry from bibkey search """
+        # compare the current bibkey entry and the one to be loaded
+        current_bibkey = self.mw.inpBibKey.text().strip()
+        load_bibkey = self.dialogBibKey.listEntry.currentItem().text()
+        # do nothing, because the bibkey is already loaded
+        if current_bibkey == load_bibkey:
             pass
+        else:   # ask if need to save the current bibkey item
+            if q_save_entry(self):
+                self.save_entry()
+            try:    # avoid query empty stuff
+                bibkey = self.dialogBibKey.listEntry.currentItem().text()
+                a_dict, tags = db_select_entry(self.cursor, bibkey)
+                self.mw.loadEntry(a_dict, tags)
+                self.dialogPickDelTags.setTags(tags)
+            except AttributeError:
+                pass
 
 
 class DialogSearch(QtWidgets.QDialog):
@@ -543,6 +557,9 @@ class MainWidget(QtWidgets.QWidget):
         self.editComment.setText(a_dict['comment'])
         self.gpImage.load_imgs_from_disk(a_dict['img_linkstr'])
         self.tagBox.dispTags.setTags(tags)
+        # once an entry is loaded, disable the bibkey unless "add new entry" is clicked
+        # this makes sure <insert new entry> is properly envoked only when new entry is inserted
+        self.inpBibKey.setDisabled(True)
 
 
 class GroupImageInDialog(QtWidgets.QWidget):
@@ -908,6 +925,14 @@ def msg(title='', context='', style=''):
     else:
         d = QtWidgets.QMessageBox(QtWidgets.QMessageBox.NoIcon, title, context)
     d.exec_()
+
+
+def q_save_entry(obj):
+    context = 'Save the current entry content?'
+    q = QtWidgets.QMessageBox.question(obj, 'Save?', context,
+                                       QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                       QtWidgets.QMessageBox.Yes)
+    return q == QtWidgets.QMessageBox.Yes
 
 
 def launch():
