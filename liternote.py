@@ -17,6 +17,9 @@ ROOT = dirname(realpath(__file__))
 COLOR_BLUE = '#0066cc'
 COLOR_RED = '#cc0000'
 
+FIELDS = ('title', 'author', 'thesis', 'hypothesis', 'method', 'finding', 'comment')
+GENRES = ('Code', 'Experiment', 'Instrum', 'Theory', 'Review')
+
 
 class MainWindow(QtWidgets.QMainWindow):
 
@@ -108,7 +111,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dialogPickSearchTags.exec()
         if self.dialogPickSearchTags.result():
             n = self.dialogPickSearchTags.getSelectedNum()
-            self.dialogSearch.btnSelTags.setText('{:d} tags'.format(n))
+            if n > 0:
+                self.dialogSearch.btnSelTags.setText('{:d} tags'.format(n))
+            else:
+                self.dialogSearch.btnSelTags.setText('all tags')
 
     def add_new_entry(self):
         # before add new entry, ask if save the current one
@@ -240,17 +246,12 @@ class DialogSearch(QtWidgets.QDialog):
 
         self.btnSearch = QtWidgets.QPushButton('Search')
         self.comboFields = QtWidgets.QComboBox()
-        self.comboFields.addItems(
-                ['ALL', 'author', 'thesis', 'hypothesis',
-                 'method', 'finding', 'comment']
-        )
+        self.comboFields.addItems(('All',) + FIELDS)
         self.comboFields.setFixedWidth(120)
         self.comboGenre = QtWidgets.QComboBox()
-        self.comboGenre.addItems(
-                ['ALL', 'Code', 'Experiment', 'Instrum', 'Theory', 'Review']
-        )
+        self.comboGenre.addItems(('All',) + GENRES)
         self.comboGenre.setFixedWidth(120)
-        self.btnSelTags = QtWidgets.QPushButton('0 tags')
+        self.btnSelTags = QtWidgets.QPushButton('all tags')
         self.btnSelTags.setFixedWidth(120)
 
         self.btnSearch.setFixedWidth(100)
@@ -275,6 +276,7 @@ class DialogSearch(QtWidgets.QDialog):
         btnLayout.setAlignment(QtCore.Qt.AlignRight)
         btnLayout.addWidget(self.btnLoad)
         btnLayout.addWidget(self.btnClose)
+        self.btnLoad.clicked.connect(self.accept)
         self.btnClose.clicked.connect(self.reject)
 
         thisLayout = QtWidgets.QVBoxLayout()
@@ -307,6 +309,7 @@ class DialogBibKey(QtWidgets.QDialog):
         btnLayout.setAlignment(QtCore.Qt.AlignRight)
         btnLayout.addWidget(self.btnLoad)
         btnLayout.addWidget(self.btnClose)
+        self.btnLoad.clicked.connect(self.accept)
         self.btnClose.clicked.connect(self.reject)
 
         thisLayout = QtWidgets.QVBoxLayout()
@@ -445,11 +448,14 @@ class MainWidget(QtWidgets.QWidget):
 
         self.inpBibKey = QtWidgets.QLineEdit()
         self.tagBox = TagBox(parent=self)
+        self.editTitle = QtWidgets.QTextEdit()
+        self.editTitle.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
+        self.editTitle.setWordWrapMode(QTextOption.WordWrap)
         self.editAuthor = QtWidgets.QTextEdit()
         self.editAuthor.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
         self.editAuthor.setWordWrapMode(QTextOption.WordWrap)
         self.comboGenre = QtWidgets.QComboBox()
-        self.comboGenre.addItems(['Code', 'Experiment', 'Instrum', 'Theory', 'Review'])
+        self.comboGenre.addItems(GENRES)
         self.comboGenre.setFixedWidth(120)
         self.editThesis = QtWidgets.QTextEdit()
         self.editThesis.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
@@ -468,6 +474,9 @@ class MainWidget(QtWidgets.QWidget):
         self.editComment.setWordWrapMode(QTextOption.WordWrap)
         self.gpImage = GroupImage(parent=self)
 
+        areaTitle = QtWidgets.QScrollArea()
+        areaTitle.setWidgetResizable(True)
+        areaTitle.setWidget(self.editTitle)
         areaAuthor = QtWidgets.QScrollArea()
         areaAuthor.setWidgetResizable(True)
         areaAuthor.setWidget(self.editAuthor)
@@ -501,25 +510,31 @@ class MainWidget(QtWidgets.QWidget):
         thisLayout.setAlignment(QtCore.Qt.AlignTop)
         thisLayout.addLayout(topLayout, 0, 0, 1, 4)
         thisLayout.addWidget(self.tagBox, 1, 0, 1, 4)
-        thisLayout.addWidget(QtWidgets.QLabel('Author'), 2, 0)
+        thisLayout.addWidget(QtWidgets.QLabel('Title'), 2, 0)
         thisLayout.addWidget(QtWidgets.QLabel('Thesis'), 2, 1)
         thisLayout.addWidget(QtWidgets.QLabel('Hypothesis'), 2, 2)
-        thisLayout.addWidget(areaAuthor, 3, 0)
-        thisLayout.addWidget(areaThesis, 3, 1)
-        thisLayout.addWidget(areaHypo, 3, 2)
-        thisLayout.addWidget(QtWidgets.QLabel('Method'), 4, 0)
-        thisLayout.addWidget(QtWidgets.QLabel('Finding'), 4, 1)
-        thisLayout.addWidget(QtWidgets.QLabel('Comment'), 4, 2)
-        thisLayout.addWidget(areaMethod, 5, 0)
-        thisLayout.addWidget(areaFinding, 5, 1)
-        thisLayout.addWidget(areaComment, 5, 2)
+        thisLayout.addWidget(areaTitle, 3, 0)
+        thisLayout.addWidget(QtWidgets.QLabel('Author'), 4, 0)
+        thisLayout.addWidget(areaAuthor, 5, 0)
+        thisLayout.addWidget(areaThesis, 3, 1, 3, 1)
+        thisLayout.addWidget(areaHypo, 3, 2, 3, 1)
+        thisLayout.addWidget(QtWidgets.QLabel('Method'), 6, 0)
+        thisLayout.addWidget(QtWidgets.QLabel('Finding'), 6, 1)
+        thisLayout.addWidget(QtWidgets.QLabel('Comment'), 6, 2)
+        thisLayout.addWidget(areaMethod, 7, 0)
+        thisLayout.addWidget(areaFinding, 7, 1)
+        thisLayout.addWidget(areaComment, 7, 2)
         thisLayout.addWidget(QtWidgets.QLabel('Images'), 2, 3)
-        thisLayout.addWidget(areaImg, 3, 3, 3, 1)
+        thisLayout.addWidget(areaImg, 3, 3, 5, 1)
+        thisLayout.setRowStretch(3, 1)
+        thisLayout.setRowStretch(5, 1)
+        thisLayout.setRowStretch(7, 2)
         self.setLayout(thisLayout)
 
     def clear_all(self):
         """ Clear all contents """
         self.inpBibKey.setText('')
+        self.editTitle.clear()
         self.editThesis.clear()
         self.editComment.clear()
         self.editHypo.clear()
@@ -534,6 +549,7 @@ class MainWidget(QtWidgets.QWidget):
         a_dict = {
             'bibkey': self.inpBibKey.text().strip(),
             'genre': self.comboGenre.currentText(),
+            'title': self.editTitle.toPlainText(),
             'author': self.editAuthor.toPlainText(),
             'thesis': self.editThesis.toPlainText(),
             'hypothesis': self.editHypo.toPlainText(),
@@ -549,6 +565,7 @@ class MainWidget(QtWidgets.QWidget):
         """ Load entry information """
         self.inpBibKey.setText(a_dict['bibkey'])
         self.comboGenre.setCurrentText(a_dict['genre'])
+        self.editTitle.setText(a_dict['title'])
         self.editAuthor.setText(a_dict['author'])
         self.editThesis.setText(a_dict['thesis'])
         self.editHypo.setText(a_dict['hypothesis'])
@@ -771,7 +788,11 @@ class TagBox(QtWidgets.QWidget):
         self.btnDel = QtWidgets.QPushButton('Remove Tag')
         self.comboTags = QtWidgets.QComboBox()
         self.editNewTag = QtWidgets.QLineEdit()
+        self.editNewTag.setSizePolicy(QtWidgets.QSizePolicy.Minimum,
+                                     QtWidgets.QSizePolicy.Minimum)
         self.comboTags.setLineEdit(self.editNewTag)
+        self.comboTags.setSizePolicy(QtWidgets.QSizePolicy.Minimum,
+                                     QtWidgets.QSizePolicy.Minimum)
         self.dispTags = DispTags1Row(COLOR_BLUE, parent=self)
 
         thisLayout = QtWidgets.QHBoxLayout()
@@ -960,6 +981,7 @@ def create_or_open_db(filename):
     sql = """ CREATE TABLE IF NOT EXISTS note (
         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
         bibkey TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL, 
         author TEXT NOT NULL,
         genre TEXT, 
         thesis TEXT, 
@@ -972,13 +994,14 @@ def create_or_open_db(filename):
     cursor.execute(sql)
     
     sql = """ CREATE TABLE IF NOT EXISTS tags (
-        bibkey TEXT NOT NULL,
+        bibkey TEXT UNIQUE NOT NULL,
         tag TEXT NOT NULL
     );"""
     cursor.execute(sql)
 
     # create fts5 virtual table for full text search
     sql = """ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
+        title,
         author,
         thesis, 
         hypothesis,
@@ -994,24 +1017,24 @@ def create_or_open_db(filename):
     # create triggers
     cursor.execute(""" CREATE TRIGGER IF NOT EXISTS tbl_ai 
     AFTER INSERT ON note BEGIN
-    INSERT INTO fts(rowid, author, thesis, hypothesis, method, 
-        finding, comment) VALUES (new.id, new.author, new.thesis, new.hypothesis,
-        new.method, new.finding, new.comment);
+    INSERT INTO fts(rowid, title, author, thesis, hypothesis, method, 
+        finding, comment) VALUES (new.id, new.title, new.author, new.thesis, 
+        new.hypothesis, new.method, new.finding, new.comment);
     END;""")
     cursor.execute(""" CREATE TRIGGER IF NOT EXISTS tbl_ad 
     AFTER DELETE ON note BEGIN
-      INSERT INTO fts(fts, rowid, author, thesis, hypothesis, method, 
-        finding, comment) VALUES ('delete', old.id, old.author, old.thesis, 
+      INSERT INTO fts(fts, rowid, title, author, thesis, hypothesis, method, 
+        finding, comment) VALUES ('delete', old.id, old.title, old.author, old.thesis, 
         old.hypothesis, old.method, old.finding, old.comment);
     END;""")
     cursor.execute(""" CREATE TRIGGER IF NOT EXISTS tbl_au 
     AFTER UPDATE ON note BEGIN
-      INSERT INTO fts(fts, rowid, author, thesis, hypothesis, method, 
-        finding, comment) VALUES ('delete', old.id, old.author, old.thesis, 
+      INSERT INTO fts(fts, rowid, title, author, thesis, hypothesis, method, 
+        finding, comment) VALUES ('delete', old.id, old.title, old.author, old.thesis, 
         old.hypothesis, old.method, old.finding, old.comment);
-      INSERT INTO fts(rowid, author, thesis, hypothesis, method, 
-        finding, comment) VALUES (new.id, new.author, new.thesis, new.hypothesis,
-        new.method, new.finding, new.comment);
+      INSERT INTO fts(rowid, title, author, thesis, hypothesis, method, 
+        finding, comment) VALUES (new.id, new.title, new.author, new.thesis, 
+        new.hypothesis, new.method, new.finding, new.comment);
     END;""")
 
     conn.commit()
@@ -1022,9 +1045,9 @@ def create_or_open_db(filename):
 def db_insert_entry(conn, c, entry_dict, tags=None):
     """ Insert new entry into database """
 
-    fields = ['bibkey', 'author', 'genre', 'thesis', 'hypothesis',
+    fields = ['bibkey', 'title', 'author', 'genre', 'thesis', 'hypothesis',
               'method', 'finding', 'comment', 'img_linkstr']
-    sql = """ INSERT INTO note ({:s}) VALUES (?,?,?,?,?,?,?,?,?) 
+    sql = """ INSERT INTO note ({:s}) VALUES (?,?,?,?,?,?,?,?,?,?) 
             """.format(','.join(fields))
     c.execute(sql, tuple(entry_dict[field] for field in fields))
     conn.commit()
@@ -1038,7 +1061,7 @@ def db_insert_entry(conn, c, entry_dict, tags=None):
 def db_update_entry(conn, c, id_, entry_dict, tags=None):
     """ Update entry in database """
 
-    fields = ['author', 'genre', 'thesis', 'hypothesis',
+    fields = ['author', 'title', 'genre', 'thesis', 'hypothesis',
               'method', 'finding', 'comment', 'img_linkstr']
     sql = """ UPDATE note SET {:s} WHERE id = (?) 
             """.format(','.join('{:s} = (?)'.format(field) for field in fields))
@@ -1066,7 +1089,7 @@ def db_bibkey_id(c, bibkey):
 
 def db_select_last_entry(c):
     """ Seletc the last entry from database """
-    fields = ['bibkey', 'author', 'genre', 'thesis', 'hypothesis',
+    fields = ['bibkey', 'title', 'author', 'genre', 'thesis', 'hypothesis',
               'method', 'finding', 'comment', 'img_linkstr']
     sql = "SELECT {:s} FROM note ORDER BY id DESC LIMIT 1".format(','.join(fields))
     c.execute(sql)
@@ -1097,7 +1120,7 @@ def db_select_entry(c, bibkey):
     :returns
         entry_dict: dict
     """
-    fields = ['bibkey', 'author', 'genre', 'thesis', 'hypothesis',
+    fields = ['bibkey', 'title', 'author', 'genre', 'thesis', 'hypothesis',
               'method', 'finding', 'comment', 'img_linkstr']
     sql = "SELECT {:s} FROM note WHERE bibkey = (?)".format(','.join(fields))
     c.execute(sql, (bibkey,))
@@ -1114,7 +1137,7 @@ def db_select_entry(c, bibkey):
 def db_query_all_tags(c):
     """ Query all tags """
 
-    c.execute("SELECT DISTINCT tag FROM tags ORDER BY tag ASC")
+    c.execute("SELECT DISTINCT tag FROM tags ORDER BY tag COLLATE NOCASE ASC")
     return tuple(r[0] for r in c.fetchall())
 
 
@@ -1129,15 +1152,15 @@ def db_search_fulltext(c, field, genre, keyword, tags=None):
     :returns
         bibkeys: list of matched bibkeys
     """
-    if genre == 'ALL':
+    if genre == 'All':
         genre_cond = ''
     else:
         genre_cond = " genre = '{:s}' AND ".format(genre)
 
     if tags:
         tag_str = ", ".join(list("'{:s}'".format(t) for t in tags))
-        if field == 'ALL':
-            all_fields = '{author thesis hypothesis method finding comment}'
+        if field == 'All':
+            all_fields = '{title author thesis hypothesis method finding comment}'
             sql = """ SELECT DISTINCT note.bibkey FROM note 
             JOIN tags ON note.bibkey = tags.bibkey
             WHERE {:s} id IN 
@@ -1154,8 +1177,8 @@ def db_search_fulltext(c, field, genre, keyword, tags=None):
             ORDER BY note.bibkey ASC
             """.format(genre_cond, field, keyword, tag_str)
     else:
-        if field == 'ALL':
-            all_fields = '{author thesis hypothesis method finding comment}'
+        if field == 'All':
+            all_fields = '{title author thesis hypothesis method finding comment}'
             sql = """ SELECT bibkey FROM note WHERE {:s} id IN 
             (SELECT rowid FROM fts WHERE fts MATCH '{:s}: {:s}' ORDER BY RANK DESC)
             ORDER BY bibkey ASC
