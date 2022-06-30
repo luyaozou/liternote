@@ -33,10 +33,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.resize(QtCore.QSize(900, 600))
         self.setWindowIcon(QIcon('icon/icon_literature.png'))
         self.showMaximized()
+        self.clipboard = QtWidgets.QApplication.clipboard()
         self.conn, self.cursor = create_or_open_db(path_join(ROOT,
                                                              'liternote.db'))
         self.dialogSearch = DialogSearch(parent=self)
         self.dialogBibKey = DialogBibKey(parent=self)
+        self.dialogAddImg = DialogAddImg(self.clipboard, parent=self)
         self.dialogViewImg = DialogViewImg(parent=self)
         self.dialogDelImg = DialogDelImg(parent=self)
         self.dialogPatchKey = DialogPatchBibkey(parent=self)
@@ -58,6 +60,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addToolBar(toolBar)
         toolBar.actionNewEntry.triggered.connect(self.add_new_entry)
         toolBar.actionSaveEntry.triggered.connect(self.save_entry)
+        toolBar.actionAddImg.triggered.connect(self.add_img)
         toolBar.actionViewImg.triggered.connect(self.view_img)
         toolBar.actionDeleteImg.triggered.connect(self.open_dialog_del_img)
         toolBar.actionSearchBibkey.triggered.connect(self.dialogBibKey.showNormal)
@@ -69,17 +72,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.mw.tagBox.btnAdd.clicked.connect(self.tagbox_add_tag)
         self.mw.btnChangeBibkey.clicked.connect(self.change_bibkey)
 
-        self.clipboard = QtWidgets.QApplication.clipboard()
-        self.clipboard.dataChanged.connect(self.clipboardChanged)
-
         # load the last entry
         self.mw.loadEntry(*db_select_last_entry(self.cursor))
         self.refresh_all_tags()
-
-    def clipboardChanged(self):
-        img = self.clipboard.image()
-        if not img.isNull():
-            self.mw.gpImage.add_sgl_img(img)
 
     def closeEvent(self, ev):
         # ask if save the last operation
@@ -209,6 +204,16 @@ class MainWindow(QtWidgets.QMainWindow):
     def view_img(self):
         self.dialogViewImg.load_imgs(self.mw.gpImage.get_list_img())
         self.dialogViewImg.showMaximized()
+
+    def add_img(self):
+        self.dialogAddImg.exec()
+        if self.dialogAddImg.result() == QtWidgets.QDialog.Accepted:
+            img = self.dialogAddImg.img
+            if not img.isNull():
+                self.mw.gpImage.add_sgl_img(img)
+                # after image is inserted, clear the image in the dialog
+                self.dialogAddImg.img = QImage()
+                self.dialogAddImg.labelImg.clear()
 
     def search_bibkey(self):
 
@@ -594,6 +599,34 @@ class DialogChangeBibkey(QtWidgets.QDialog):
         self.btnCancel.clicked.connect(self.reject)
 
 
+class DialogAddImg(QtWidgets.QDialog):
+
+    def __init__(self, clipboard, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle('Add Image')
+        self._clipboard = clipboard
+        self.img = QImage()
+        self.labelImg = QtWidgets.QLabel()
+        self.btnOk = QtWidgets.QPushButton  ('Add')
+        self.btnCancel = QtWidgets.QPushButton('Cancel')
+        rowBtn = QtWidgets.QHBoxLayout()
+        rowBtn.setAlignment(QtCore.Qt.AlignRight)
+        rowBtn.addWidget(self.btnCancel)
+        rowBtn.addWidget(self.btnOk)
+        thisLayout = QtWidgets.QVBoxLayout()
+        thisLayout.addWidget(self.labelImg)
+        thisLayout.addLayout(rowBtn)
+        self.setLayout(thisLayout)
+        self.btnOk.clicked.connect(self.accept)
+        self.btnCancel.clicked.connect(self.reject)
+
+    def keyPressEvent(self, ev):
+        if ev.key() == QtCore.Qt.Key_V and ev.modifiers() == QtCore.Qt.ControlModifier:
+            self.labelImg.setPixmap(QPixmap(self._clipboard.image()))
+            self.img = self._clipboard.image()
+
+
 class MainWidget(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
@@ -896,6 +929,8 @@ class ToolBar(QtWidgets.QToolBar):
                 QIcon(path_join(ROOT, 'icon', 'new_entry.png')), 'Insert New Entry')
         self.actionSaveEntry = QtWidgets.QAction(
                 QIcon(path_join(ROOT, 'icon', 'save_entry.png')), 'Save Current Entry')
+        self.actionAddImg = QtWidgets.QAction(
+                QIcon(path_join(ROOT, 'icon', 'add_img.png')), 'Add Image')
         self.actionViewImg = QtWidgets.QAction(
                 QIcon(path_join(ROOT, 'icon', 'view_img.png')), 'View Image')
         self.actionDeleteImg = QtWidgets.QAction(
@@ -908,6 +943,7 @@ class ToolBar(QtWidgets.QToolBar):
         self.addAction(self.actionNewEntry)
         self.addAction(self.actionSaveEntry)
         self.addSeparator()
+        self.addAction(self.actionAddImg)
         self.addAction(self.actionViewImg)
         self.addAction(self.actionDeleteImg)
         self.addSeparator()
