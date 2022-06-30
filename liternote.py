@@ -40,6 +40,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dialogViewImg = DialogViewImg(parent=self)
         self.dialogDelImg = DialogDelImg(parent=self)
         self.dialogPatchKey = DialogPatchBibkey(parent=self)
+        self.dialogNewEntry = DialogNewEntry(parent=self)
+        self.dialogChangeBibkey = DialogChangeBibkey(parent=self)
         self.dialogDelImg.accepted.connect(self.del_img)
         self.dialogSearch.btnSearch.clicked.connect(self.search_fulltext)
         self.dialogSearch.btnLoad.clicked.connect(self.load_entry_fulltext)
@@ -63,6 +65,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.mw)
         self.mw.tagBox.btnDel.clicked.connect(self.tagbox_del_tag)
         self.mw.tagBox.btnAdd.clicked.connect(self.tagbox_add_tag)
+        self.mw.btnChangeBibkey.clicked.connect(self.change_bibkey)
 
         self.clipboard = QtWidgets.QApplication.clipboard()
         self.clipboard.dataChanged.connect(self.clipboardChanged)
@@ -89,6 +92,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dialogPickSearchTags.setTags(all_tags)
         self.mw.tagBox.comboTags.clear()
         self.mw.tagBox.comboTags.addItems(all_tags)
+        self.mw.tagBox.comboTags.adjustSize()
 
     def tagbox_add_tag(self):
         """ Add a tag to the current tagbox """
@@ -109,19 +113,44 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def select_search_tags(self):
         self.dialogPickSearchTags.exec()
-        if self.dialogPickSearchTags.result():
+        if self.dialogPickSearchTags.result() == QtWidgets.QDialog.Accepted:
             n = self.dialogPickSearchTags.getSelectedNum()
             if n > 0:
                 self.dialogSearch.btnSelTags.setText('{:d} tags'.format(n))
             else:
                 self.dialogSearch.btnSelTags.setText('all tags')
 
+    def change_bibkey(self):
+        self.dialogChangeBibkey.oldBibkey.setText(self.mw.inpBibKey.text())
+        self.dialogChangeBibkey.exec()
+        if self.dialogChangeBibkey.result() == QtWidgets.QDialog.Accepted:
+            old_key = self.mw.inpBibKey.text()
+            new_key = self.dialogChangeBibkey.editNewBibkey.text()
+            try:
+                db_replace_bibkey(self.conn, self.cursor, old_key, new_key)
+                self.mw.inpBibKey.setText(new_key)
+            except sqlite3.Error as err:
+                msg(title='Error', style='critical', context=str(err))
+
     def add_new_entry(self):
-        # before add new entry, ask if save the current one
-        if q_save_entry(self):
-            self.save_entry()
-        self.mw.inpBibKey.setEnabled(True)
-        self.mw.clear_all()
+        self.dialogNewEntry.exec()
+        if self.dialogNewEntry.result() == QtWidgets.QDialog.Accepted:
+            new_bibkey = self.dialogNewEntry.editBibkey.text()
+            # check duplicate key.
+            id_ = db_bibkey_id(self.cursor, new_bibkey)
+            # if duplicate, there will be an id_, else None
+            if isinstance(id_, type(None)):
+                db_insert_new_bibkey(self.conn, self.cursor, new_bibkey)
+                # before add new entry, ask if save the current one
+                if q_save_entry(self):
+                    self.save_entry()
+                self.mw.clear_all()
+                self.mw.inpBibKey.setText(new_bibkey)
+            else:
+                msg(title='Error', style='critical',
+                    context='Bibkey already exists in database')
+                # restart the dialog
+                self.add_new_entry()
 
     def save_entry(self):
         entry_dict, tags = self.mw.getEntry()
@@ -441,12 +470,72 @@ class DialogPatchBibkey(QtWidgets.QDialog):
         pass
 
 
+class DialogNewEntry(QtWidgets.QDialog):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumWidth(300)
+        self.setWindowTitle('Insert New Entry')
+        self.editBibkey = QtWidgets.QLineEdit()
+        self.btnOk = QtWidgets.QPushButton('Insert')
+        self.btnCancel = QtWidgets.QPushButton('Cancel')
+        row1 = QtWidgets.QHBoxLayout()
+        row1.setAlignment(QtCore.Qt.AlignLeft)
+        row1.addWidget(QtWidgets.QLabel('Bibkey'))
+        row1.addWidget(self.editBibkey)
+        row2 = QtWidgets.QHBoxLayout()
+        row2.setAlignment(QtCore.Qt.AlignRight)
+        row2.addWidget(self.btnCancel)
+        row2.addWidget(self.btnOk)
+        thisLayout = QtWidgets.QVBoxLayout()
+        thisLayout.setAlignment(QtCore.Qt.AlignTop)
+        thisLayout.addLayout(row1)
+        thisLayout.addLayout(row2)
+        self.setLayout(thisLayout)
+        self.btnOk.clicked.connect(self.accept)
+        self.btnCancel.clicked.connect(self.reject)
+
+
+class DialogChangeBibkey(QtWidgets.QDialog):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumWidth(300)
+        self.setWindowTitle('Change Current Bibkey')
+        self.oldBibkey = QtWidgets.QLineEdit()
+        self.oldBibkey.setReadOnly(True)
+        self.editNewBibkey = QtWidgets.QLineEdit()
+        self.btnOk = QtWidgets.QPushButton('Update')
+        self.btnCancel = QtWidgets.QPushButton('Cancel')
+        row1 = QtWidgets.QHBoxLayout()
+        row1.setAlignment(QtCore.Qt.AlignLeft)
+        row1.addWidget(QtWidgets.QLabel('Old Bibkey'))
+        row1.addWidget(self.oldBibkey)
+        row2 = QtWidgets.QHBoxLayout()
+        row2.setAlignment(QtCore.Qt.AlignLeft)
+        row2.addWidget(QtWidgets.QLabel('New Bibkey'))
+        row2.addWidget(self.editNewBibkey)
+        row3 = QtWidgets.QHBoxLayout()
+        row3.setAlignment(QtCore.Qt.AlignRight)
+        row3.addWidget(self.btnOk)
+        row3.addWidget(self.btnCancel)
+        thisLayout = QtWidgets.QVBoxLayout()
+        thisLayout.setAlignment(QtCore.Qt.AlignTop)
+        thisLayout.addLayout(row1)
+        thisLayout.addLayout(row2)
+        thisLayout.addLayout(row3)
+        self.setLayout(thisLayout)
+        self.btnOk.clicked.connect(self.accept)
+        self.btnCancel.clicked.connect(self.reject)
+
+
 class MainWidget(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.inpBibKey = QtWidgets.QLineEdit()
+        self.btnChangeBibkey = QtWidgets.QPushButton('Update Bibkey')
         self.tagBox = TagBox(parent=self)
         self.editTitle = QtWidgets.QTextEdit()
         self.editTitle.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
@@ -504,6 +593,7 @@ class MainWidget(QtWidgets.QWidget):
         topLayout.addWidget(self.comboGenre)
         topLayout.addWidget(QtWidgets.QLabel('Bibkey'))
         topLayout.addWidget(self.inpBibKey)
+        topLayout.addWidget(self.btnChangeBibkey)
         topLayout.setAlignment(QtCore.Qt.AlignLeft)
 
         thisLayout = QtWidgets.QGridLayout()
@@ -511,15 +601,15 @@ class MainWidget(QtWidgets.QWidget):
         thisLayout.addLayout(topLayout, 0, 0, 1, 4)
         thisLayout.addWidget(self.tagBox, 1, 0, 1, 4)
         thisLayout.addWidget(QtWidgets.QLabel('Title'), 2, 0)
-        thisLayout.addWidget(QtWidgets.QLabel('Thesis'), 2, 1)
-        thisLayout.addWidget(QtWidgets.QLabel('Hypothesis'), 2, 2)
+        thisLayout.addWidget(QtWidgets.QLabel('Thesis & Objective'), 2, 1)
+        thisLayout.addWidget(QtWidgets.QLabel('Theory & Hypothesis'), 2, 2)
         thisLayout.addWidget(areaTitle, 3, 0)
         thisLayout.addWidget(QtWidgets.QLabel('Author'), 4, 0)
         thisLayout.addWidget(areaAuthor, 5, 0)
         thisLayout.addWidget(areaThesis, 3, 1, 3, 1)
         thisLayout.addWidget(areaHypo, 3, 2, 3, 1)
-        thisLayout.addWidget(QtWidgets.QLabel('Method'), 6, 0)
-        thisLayout.addWidget(QtWidgets.QLabel('Finding'), 6, 1)
+        thisLayout.addWidget(QtWidgets.QLabel('Method & Tech'), 6, 0)
+        thisLayout.addWidget(QtWidgets.QLabel('Result & Finding'), 6, 1)
         thisLayout.addWidget(QtWidgets.QLabel('Comment'), 6, 2)
         thisLayout.addWidget(areaMethod, 7, 0)
         thisLayout.addWidget(areaFinding, 7, 1)
@@ -533,7 +623,6 @@ class MainWidget(QtWidgets.QWidget):
 
     def clear_all(self):
         """ Clear all contents """
-        self.inpBibKey.setText('')
         self.editTitle.clear()
         self.editThesis.clear()
         self.editComment.clear()
@@ -788,11 +877,7 @@ class TagBox(QtWidgets.QWidget):
         self.btnDel = QtWidgets.QPushButton('Remove Tag')
         self.comboTags = QtWidgets.QComboBox()
         self.editNewTag = QtWidgets.QLineEdit()
-        self.editNewTag.setSizePolicy(QtWidgets.QSizePolicy.Minimum,
-                                     QtWidgets.QSizePolicy.Minimum)
         self.comboTags.setLineEdit(self.editNewTag)
-        self.comboTags.setSizePolicy(QtWidgets.QSizePolicy.Minimum,
-                                     QtWidgets.QSizePolicy.Minimum)
         self.dispTags = DispTags1Row(COLOR_BLUE, parent=self)
 
         thisLayout = QtWidgets.QHBoxLayout()
@@ -1042,6 +1127,13 @@ def create_or_open_db(filename):
     return conn, cursor
 
 
+def db_insert_new_bibkey(conn, c, bibkey):
+    # title & author are not null, so need to give some default value
+    c.execute("INSERT INTO note (bibkey, title, author) VALUES (?, ?, ?)",
+              (bibkey, ' ', ' '))
+    conn.commit()
+
+
 def db_insert_entry(conn, c, entry_dict, tags=None):
     """ Insert new entry into database """
 
@@ -1075,6 +1167,14 @@ def db_update_entry(conn, c, id_, entry_dict, tags=None):
         sql = """ INSERT INTO tags (bibkey, tag) VALUES ('{:s}', ?) """.format(entry_dict['bibkey'])
         c.executemany(sql, ((tag,) for tag in tags))
         conn.commit()
+
+
+def db_replace_bibkey(conn, c, old_key, new_key):
+    """ Replace old bibkey with new bibkey """
+    id_ = db_bibkey_id(c, old_key)
+    sql = 'UPDATE note SET bibkey = (?) WHERE id = (?)'
+    c.execute(sql, (new_key, id_))
+    conn.commit()
 
 
 def db_bibkey_id(c, bibkey):
