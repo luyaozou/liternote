@@ -643,6 +643,8 @@ class MainWidget(QtWidgets.QWidget):
         self.inpBibKey.textChanged.connect(self.edit_status)
         self.comboGenre.currentIndexChanged.connect(self.edit_status)
         self.gpImage.sig_img_changed.connect(self.edit_status)
+        self.gpImage.img_width = int(self.gpImage.width() -
+                                     areaImg.verticalScrollBar().width() * 2)
 
     def edit_status(self):
         """ If anything changes in the box, trigger this to write the edit status
@@ -751,6 +753,7 @@ class GroupImage(QtWidgets.QWidget):
         self._list_wdgs = []
         self._list_links = []
         self.setLayout(self._layout)
+        self.img_width = 100
 
     def load_imgs_from_disk(self, img_links):
 
@@ -764,11 +767,11 @@ class GroupImage(QtWidgets.QWidget):
             for img, wdg, link in zip(self._list_img, self._list_wdgs,
                                       self._list_links[:n_old]):
                 img.load(path_join(ROOT, 'img', link))
-                wdg.setPixmap(QPixmap(img.scaledToWidth(self.width())))
+                wdg.setPixmap(QPixmap(img.scaledToWidth(self.img_width)))
             for link in self._list_links[n_old:]:
                 wdg = QtWidgets.QLabel()
                 img = QImage(path_join(ROOT, 'img', link))
-                wdg.setPixmap(QPixmap(img.scaledToWidth(self.width())))
+                wdg.setPixmap(QPixmap(img.scaledToWidth(self.img_width)))
                 self._list_wdgs.append(wdg)
                 self._list_img.append(img)
                 self._layout.addWidget(wdg)
@@ -776,21 +779,23 @@ class GroupImage(QtWidgets.QWidget):
             for img, wdg, link in zip(self._list_img, self._list_wdgs[:n_new],
                                       self._list_links):
                 img.load(path_join(ROOT, 'img', link))
-                wdg.setPixmap(QPixmap(img.scaledToWidth(self.width())))
+                wdg.setPixmap(QPixmap(img.scaledToWidth(self.img_width)))
             for i in range(n_new, n_old):
                 self._list_img.pop()
                 wdg = self._list_wdgs.pop()
                 self._layout.removeWidget(wdg)
                 wdg.deleteLater()
+        self.adjustSize()
 
     def add_sgl_img(self, img):
         """ add single image """
         wdg = QtWidgets.QLabel()
-        wdg.setPixmap(QPixmap(img.scaledToWidth(self.width())))
+        wdg.setPixmap(QPixmap(img.scaledToWidth(self.img_width)))
         self._list_img.append(img)
         self._list_links.append('') # new image from clipboard does not have link yet
         self._list_wdgs.append(wdg)
         self._layout.addWidget(wdg)
+        self.adjustSize()
         self.sig_img_changed.emit()
 
     def del_imgs(self, checked_ids):
