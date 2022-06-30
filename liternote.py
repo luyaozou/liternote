@@ -48,6 +48,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dialogSearch.btnSelTags.clicked.connect(self.select_search_tags)
         self.dialogBibKey.btnSearch.clicked.connect(self.search_bibkey)
         self.dialogBibKey.btnLoad.clicked.connect(self.load_entry_bibkey)
+        self.dialogBibKey.prevPage.clicked.connect(self.dialog_bibkey_prev)
+        self.dialogBibKey.nextPage.clicked.connect(self.dialog_bibkey_next)
         self.dialogPatchKey.btnOk.clicked.connect(self.check_patchkey)
         self.dialogPickSearchTags = DialogMultiTag(color=COLOR_BLUE, parent=self)
         self.dialogPickDelTags = DialogMultiTag(color=COLOR_RED, parent=self)
@@ -209,14 +211,48 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dialogViewImg.showMaximized()
 
     def search_bibkey(self):
+
+        n_per_page = int(self.dialogBibKey.comboNPerPage.currentText())
         keyword = self.dialogBibKey.inpSearchWord.text().strip()
-        if keyword:
-            bibkeys = db_search_bibkey(self.cursor, keyword)
+        try:
+            bibkeys = db_search_bibkey(self.cursor, keyword, n_per_page, page=1)
             self.dialogBibKey.listEntry.clear()
             self.dialogBibKey.listEntry.addItems(bibkeys)
             self.dialogBibKey.listEntry.setCurrentRow(0)
-        else:
+            self.dialogBibKey.setCurrentPage(1)
+        except sqlite3.Error as err:
+            msg(title='Error', style='critical', context=str(err))
+
+    def dialog_bibkey_next(self):
+        n_per_page = int(self.dialogBibKey.comboNPerPage.currentText())
+        keyword = self.dialogBibKey.inpSearchWord.text().strip()
+        page = self.dialogBibKey.current_page + 1
+        try:
+            bibkeys = db_search_bibkey(self.cursor, keyword, n_per_page, page=page)
+            if bibkeys:
+                self.dialogBibKey.listEntry.clear()
+                self.dialogBibKey.listEntry.addItems(bibkeys)
+                self.dialogBibKey.listEntry.setCurrentRow(0)
+                self.dialogBibKey.setCurrentPage(page)
+            else:  # if returned bibkeys are empty, then it's the end of the
+                # record, and therefore do not shift
+                self.dialogBibKey.nextPage.setDisabled(True)
+        except sqlite3.Error as err:
+            msg(title='Error', style='critical', context=str(err))
+
+    def dialog_bibkey_prev(self):
+        n_per_page = int(self.dialogBibKey.comboNPerPage.currentText())
+        keyword = self.dialogBibKey.inpSearchWord.text().strip()
+        page = self.dialogBibKey.current_page - 1
+        try:
+            bibkeys = db_search_bibkey(self.cursor, keyword, n_per_page, page=page)
             self.dialogBibKey.listEntry.clear()
+            self.dialogBibKey.listEntry.addItems(bibkeys)
+            self.dialogBibKey.listEntry.setCurrentRow(0)
+            self.dialogBibKey.setCurrentPage(page)
+            self.dialogBibKey.nextPage.setDisabled(False)
+        except sqlite3.Error as err:
+            msg(title='Error', style='critical', context=str(err))
 
     def search_fulltext(self):
         field = self.dialogSearch.comboFields.currentText()
@@ -333,10 +369,25 @@ class DialogBibKey(QtWidgets.QDialog):
         self.btnSearch = QtWidgets.QPushButton('Search')
         self.btnSearch.setFixedWidth(100)
         self.inpSearchWord = QtWidgets.QLineEdit()
+        self.resize(QtCore.QSize(300, 500))
         barLayout = QtWidgets.QHBoxLayout()
         barLayout.addWidget(self.inpSearchWord)
         barLayout.addWidget(self.btnSearch)
 
+        self.comboNPerPage = QtWidgets.QComboBox()
+        self.comboNPerPage.addItems(['10', '20', '50', '100'])
+        self.prevPage = QtWidgets.QPushButton('⏪')
+        self.prevPage.setFixedWidth(30)
+        self.nextPage = QtWidgets.QPushButton('⏩')
+        self.nextPage.setFixedWidth(30)
+        self.labelPage = QtWidgets.QLabel('Page ')
+        self.current_page = 1
+        row1 = QtWidgets.QHBoxLayout()
+        row1.addWidget(QtWidgets.QLabel('# per page'))
+        row1.addWidget(self.comboNPerPage)
+        row1.addWidget(self.prevPage)
+        row1.addWidget(self.labelPage)
+        row1.addWidget(self.nextPage)
         self.listEntry = QtWidgets.QListWidget()
         self.listEntry.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
 
@@ -351,10 +402,16 @@ class DialogBibKey(QtWidgets.QDialog):
 
         thisLayout = QtWidgets.QVBoxLayout()
         thisLayout.setAlignment(QtCore.Qt.AlignTop)
+        thisLayout.addLayout(row1)
         thisLayout.addLayout(barLayout)
         thisLayout.addWidget(self.listEntry)
         thisLayout.addLayout(btnLayout)
         self.setLayout(thisLayout)
+
+    def setCurrentPage(self, p):
+        self.labelPage.setText('Page {:d}'.format(p))
+        self.current_page = p
+        self.prevPage.setDisabled(p <= 1)
 
 
 class DialogViewImg(QtWidgets.QDialog):
@@ -1329,17 +1386,24 @@ def db_search_fulltext(c, field, genre, keyword, tags=None):
     return list(res[0] for res in c.fetchall())
 
 
-def db_search_bibkey(c, keyword):
+def db_search_bibkey(c, keyword, n_per_page, page=1):
     """ Query bibkeys that matches fields with keyword
     :argument
         c: sqlite3 cursor
-        keyword: str
+        keyword: str            If empty, return all result
+        n_per_page: int         number of entries per page (use LIMIT in SQL)
+        page: int               take the "page"-th page (use OFFSET in SQL)
     :returns
         bibkeys: list of matched bibkeys
     """
 
-    sql = """ SELECT bibkey FROM note WHERE like('%{:s}%', bibkey) 
-    ORDER BY bibkey ASC """.format(keyword)
+    if keyword:
+        sql = """ SELECT bibkey FROM note WHERE like('%{:s}%', bibkey)  
+        ORDER BY bibkey ASC LIMIT {:d} OFFSET {:d} """.format(
+                keyword, n_per_page, (page-1)*n_per_page)
+    else:
+        sql = """ SELECT bibkey FROM note ORDER BY bibkey ASC 
+        LIMIT {:d} OFFSET {:d}""".format(n_per_page, (page-1)*n_per_page)
     c.execute(sql)
     return list(res[0] for res in c.fetchall())
 
