@@ -81,8 +81,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, ev):
         # ask if save the last operation
-        if q_save_entry(self):
-            self.save_entry()
+        if self.mw.is_edited:
+            if q_save_entry(self):
+                self.save_entry()
         self.conn.close()
         ev.accept()
 
@@ -142,8 +143,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if isinstance(id_, type(None)):
                 db_insert_new_bibkey(self.conn, self.cursor, new_bibkey)
                 # before add new entry, ask if save the current one
-                if q_save_entry(self):
-                    self.save_entry()
+                if self.mw.is_edited:
+                    if q_save_entry(self):
+                        self.save_entry()
                 self.mw.clear_all()
                 self.mw.inpBibKey.setText(new_bibkey)
             else:
@@ -163,6 +165,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     db_update_entry(self.conn, self.cursor, id_, entry_dict,
                                     tags=tags)
                     self.refresh_all_tags()
+                    # now everything is saved, restore edit status
+                    self.mw.is_edited = False
                 except sqlite3.Error as err:
                     msg(title='Error', style='critical', context=str(err))
             else:
@@ -170,6 +174,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     db_insert_entry(self.conn, self.cursor, entry_dict,
                                     tags=tags)
                     self.refresh_all_tags()
+                    # now everything is saved, restore edit status
+                    self.mw.is_edited = False
                 except sqlite3.Error as err:
                     msg(title='Error', style='critical', context=str(err))
         else:
@@ -235,8 +241,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if current_bibkey == load_bibkey:
             pass
         else:  # ask if need to save the current bibkey item
-            if q_save_entry(self):
-                self.save_entry()
+            if self.mw.is_edited:
+                if q_save_entry(self):
+                    self.save_entry()
             try:  # avoid query empty stuff
                 bibkey = self.dialogSearch.listEntry.currentItem().text()
                 a_dict, tags = db_select_entry(self.cursor, bibkey)
@@ -254,8 +261,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if current_bibkey == load_bibkey:
             pass
         else:   # ask if need to save the current bibkey item
-            if q_save_entry(self):
-                self.save_entry()
+            if self.mw.is_edited:
+                if q_save_entry(self):
+                    self.save_entry()
             try:    # avoid query empty stuff
                 bibkey = self.dialogBibKey.listEntry.currentItem().text()
                 a_dict, tags = db_select_entry(self.cursor, bibkey)
@@ -534,7 +542,9 @@ class MainWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.is_edited = False
         self.inpBibKey = QtWidgets.QLineEdit()
+        self.inpBibKey.setDisabled(True)    # only for display, can't edit directly
         self.btnChangeBibkey = QtWidgets.QPushButton('Update Bibkey')
         self.tagBox = TagBox(parent=self)
         self.editTitle = QtWidgets.QTextEdit()
@@ -621,6 +631,24 @@ class MainWidget(QtWidgets.QWidget):
         thisLayout.setRowStretch(7, 2)
         self.setLayout(thisLayout)
 
+        self.editTitle.textChanged.connect(self.edit_status)
+        self.editAuthor.textChanged.connect(self.edit_status)
+        self.editThesis.textChanged.connect(self.edit_status)
+        self.editHypo.textChanged.connect(self.edit_status)
+        self.editMethod.textChanged.connect(self.edit_status)
+        self.editFinding.textChanged.connect(self.edit_status)
+        self.editComment.textChanged.connect(self.edit_status)
+        self.tagBox.btnAdd.clicked.connect(self.edit_status)
+        self.tagBox.btnDel.clicked.connect(self.edit_status)
+        self.inpBibKey.textChanged.connect(self.edit_status)
+        self.comboGenre.currentIndexChanged.connect(self.edit_status)
+        self.gpImage.sig_img_changed.connect(self.edit_status)
+
+    def edit_status(self):
+        """ If anything changes in the box, trigger this to write the edit status
+        """
+        self.is_edited = True
+
     def clear_all(self):
         """ Clear all contents """
         self.editTitle.clear()
@@ -663,9 +691,8 @@ class MainWidget(QtWidgets.QWidget):
         self.editComment.setText(a_dict['comment'])
         self.gpImage.load_imgs_from_disk(a_dict['img_linkstr'])
         self.tagBox.dispTags.setTags(tags)
-        # once an entry is loaded, disable the bibkey unless "add new entry" is clicked
-        # this makes sure <insert new entry> is properly envoked only when new entry is inserted
-        self.inpBibKey.setDisabled(True)
+        # new entry loaded, reset edit status
+        self.is_edited = False
 
 
 class GroupImageInDialog(QtWidgets.QWidget):
@@ -713,6 +740,8 @@ class GroupImageInDialog(QtWidgets.QWidget):
 
 
 class GroupImage(QtWidgets.QWidget):
+
+    sig_img_changed = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -762,6 +791,7 @@ class GroupImage(QtWidgets.QWidget):
         self._list_links.append('') # new image from clipboard does not have link yet
         self._list_wdgs.append(wdg)
         self._layout.addWidget(wdg)
+        self.sig_img_changed.emit()
 
     def del_imgs(self, checked_ids):
 
@@ -778,6 +808,7 @@ class GroupImage(QtWidgets.QWidget):
             fillename = path_join(ROOT, 'img', link)
             if isfile(fillename):
                 os_remove(fillename)
+            self.sig_img_changed.emit()
 
     def clear(self):
         while self._list_wdgs:
