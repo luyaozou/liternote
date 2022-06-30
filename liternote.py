@@ -56,8 +56,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dialogPickSearchTags = DialogMultiTag(color=COLOR_BLUE, parent=self)
         self.dialogPickDelTags = DialogMultiTag(color=COLOR_RED, parent=self)
 
+        menuBar = MenuBar(parent=self)
         toolBar = ToolBar(parent=self)
+        self.setMenuBar(menuBar)
         self.addToolBar(toolBar)
+        menuBar.actionNewEntry.triggered.connect(self.add_new_entry)
+        menuBar.actionSaveEntry.triggered.connect(self.save_entry)
+        menuBar.actionAddImg.triggered.connect(self.add_img)
+        menuBar.actionViewImg.triggered.connect(self.view_img)
+        menuBar.actionDeleteImg.triggered.connect(self.open_dialog_del_img)
+        menuBar.actionSearchBibkey.triggered.connect(self.dialogBibKey.showNormal)
+        menuBar.actionSearchDoc.triggered.connect(self.dialogSearch.showNormal)
         toolBar.actionNewEntry.triggered.connect(self.add_new_entry)
         toolBar.actionSaveEntry.triggered.connect(self.save_entry)
         toolBar.actionAddImg.triggered.connect(self.add_img)
@@ -603,7 +612,7 @@ class DialogAddImg(QtWidgets.QDialog):
 
     def __init__(self, clipboard, parent=None):
         super().__init__(parent)
-
+        self.setMinimumWidth(300)
         self.setWindowTitle('Add Image')
         self._clipboard = clipboard
         self.img = QImage()
@@ -625,6 +634,11 @@ class DialogAddImg(QtWidgets.QDialog):
         if ev.key() == QtCore.Qt.Key_V and ev.modifiers() == QtCore.Qt.ControlModifier:
             self.labelImg.setPixmap(QPixmap(self._clipboard.image()))
             self.img = self._clipboard.image()
+            ev.accept()
+        elif ev.key() == QtCore.Qt.Key_Escape:
+            self.reject()
+        else:
+            ev.accept()
 
 
 class MainWidget(QtWidgets.QWidget):
@@ -918,6 +932,37 @@ class GroupImage(QtWidgets.QWidget):
 
     def get_list_img(self):
         return self._list_img
+
+
+class MenuBar(QtWidgets.QMenuBar):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.actionNewEntry = QtWidgets.QAction('Insert New Entry')
+        self.actionNewEntry.setShortcut('Ctrl+N')
+        self.actionSaveEntry = QtWidgets.QAction('Save Current Entry')
+        self.actionSaveEntry.setShortcut('Ctrl+S')
+        self.actionAddImg = QtWidgets.QAction('Add Image')
+        self.actionAddImg.setShortcut('Ctrl+I')
+        self.actionViewImg = QtWidgets.QAction('View Image')
+        self.actionDeleteImg = QtWidgets.QAction('Delete Image')
+        self.actionSearchBibkey = QtWidgets.QAction('Search Bibkey')
+        self.actionSearchBibkey.setShortcut('Ctrl+H')
+        self.actionSearchDoc = QtWidgets.QAction('Fulltext Search')
+        self.actionSearchDoc.setShortcut('Alt+H')
+
+        menuEntry = self.addMenu('&Entry')
+        menuEntry.addAction(self.actionNewEntry)
+        menuEntry.addAction(self.actionSaveEntry)
+        menuEntry.addSeparator()
+        menuEntry.addAction(self.actionAddImg)
+        menuEntry.addAction(self.actionViewImg)
+        menuEntry.addAction(self.actionDeleteImg)
+
+        menuSearch = self.addMenu('&Search')
+        menuSearch.addAction(self.actionSearchBibkey)
+        menuSearch.addAction(self.actionSearchDoc)
 
 
 class ToolBar(QtWidgets.QToolBar):
