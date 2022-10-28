@@ -3,7 +3,7 @@
 from setuptools import setup, find_packages
 
 setup(name='liternote',
-      version='1.1.0',
+      version='1.2.0',
       description='Simple Literature Note Editor',
       author='Luyao Zou',
       packages=find_packages('.'),

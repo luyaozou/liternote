@@ -7,6 +7,19 @@ Written in Python using PyQt5 and sqlite3.
 License: MIT. Credit: Luyao Zou (https://github.com/luyaozou)
 
 =====================
+## Release Note 1.2.0
+
+### What's New:
+
+* Add menubar
+* Optimize user experience
+  * Image is not added automatically when clipboard is pasted, 
+    but with a dialog window to confirm
+  * Optimize bibkey creation and search logic. 
+    The bibkey can be edited too.  
+  * Only ask to save when content has been modified.
+
+=====================
 ## Release Note 1.1.0
 
 ### What's New:
