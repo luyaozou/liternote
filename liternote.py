@@ -612,12 +612,12 @@ class DialogAddImg(QtWidgets.QDialog):
 
     def __init__(self, clipboard, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(300)
+        self.setMinimumWidth(400)
         self.setWindowTitle('Add Image')
         self._clipboard = clipboard
         self.img = QImage()
         self.labelImg = QtWidgets.QLabel()
-        self.btnOk = QtWidgets.QPushButton  ('Add')
+        self.btnOk = QtWidgets.QPushButton('Add')
         self.btnCancel = QtWidgets.QPushButton('Cancel')
         rowBtn = QtWidgets.QHBoxLayout()
         rowBtn.setAlignment(QtCore.Qt.AlignRight)
@@ -632,8 +632,9 @@ class DialogAddImg(QtWidgets.QDialog):
 
     def keyPressEvent(self, ev):
         if ev.key() == QtCore.Qt.Key_V and ev.modifiers() == QtCore.Qt.ControlModifier:
-            self.labelImg.setPixmap(QPixmap(self._clipboard.image()))
             self.img = self._clipboard.image()
+            self.labelImg.setPixmap(
+                    QPixmap(self.img.scaled(400, 400, QtCore.Qt.KeepAspectRatio)))
             ev.accept()
         elif ev.key() == QtCore.Qt.Key_Escape:
             self.reject()
