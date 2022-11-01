@@ -82,8 +82,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.mw.btnChangeBibkey.clicked.connect(self.change_bibkey)
 
         # load the last entry
-        self.mw.loadEntry(*db_select_last_entry(self.cursor))
         self.refresh_all_tags()
+        self.mw.loadEntry(*db_select_last_entry(self.cursor))
         # load the first page of the full bibkey list into the bibkey dialog
         self.search_bibkey()
 
@@ -96,12 +96,21 @@ class MainWindow(QtWidgets.QMainWindow):
         ev.accept()
 
     def refresh_all_tags(self):
-        # refresh the tag list
+        """ refresh the tag list """
+        # get current tag text
+        current_tag = self.mw.tagBox.comboTags.currentText()
         all_tags = db_query_all_tags(self.cursor)
         self.dialogPickSearchTags.setTags(all_tags)
         self.mw.tagBox.comboTags.clear()
         self.mw.tagBox.comboTags.addItems(all_tags)
         self.mw.tagBox.comboTags.adjustSize()
+        if current_tag in all_tags:
+            # put current tag text back into the combo box
+            # because resetting combobox will clear this info
+            # but only do this if the current_tag is still in the full tag list.
+            self.mw.tagBox.comboTags.setCurrentText(current_tag)
+        else:
+            pass
 
     def tagbox_add_tag(self):
         """ Add a tag to the current tagbox """
@@ -822,8 +831,8 @@ class MainWidget(QtWidgets.QWidget):
             'method': self.editMethod.toPlainText(),
             'finding': self.editFinding.toPlainText(),
             'comment': self.editComment.toPlainText(),
-            'img_linkstr': self.gpImage.get_link_str(),
-            'img_pairs': zip(self.gpImage.get_link_str(),
+            'img_linkstr': ','.join(self.gpImage.get_list_links()),
+            'img_pairs': zip(self.gpImage.get_list_links(),
                              self.gpImage.get_list_img())
         }
         tags = self.tagBox.dispTags.tags()
@@ -832,6 +841,7 @@ class MainWidget(QtWidgets.QWidget):
     def loadEntry(self, a_dict, tags):
         """ Load entry information """
         self._entry_id = a_dict['id']
+        self.gpImage._entry_id = a_dict['id']
         self.inpBibKey.setText(a_dict['bibkey'])
         self.comboGenre.setCurrentText(a_dict['genre'])
         self.editTitle.setText(a_dict['title'])
@@ -843,6 +853,8 @@ class MainWidget(QtWidgets.QWidget):
         self.editComment.setText(a_dict['comment'])
         self.gpImage.load_imgs_from_disk(a_dict['img_linkstr'])
         self.tagBox.dispTags.setTags(tags)
+        if tags:    # if there is tag, set the first tag to comboTags
+            self.tagBox.comboTags.setCurrentText(tags[0])
         # new entry loaded, reset edit status
         self.is_edited = False
 
@@ -944,7 +956,7 @@ class GroupImage(QtWidgets.QWidget):
         wdg.setPixmap(QPixmap(img.scaledToWidth(self.img_width)))
         self._list_img.append(img)
         self._list_links.append(
-            'ID_{:4>d}_{:d}.png'.format(self._entry_id, img.cacheKey())
+            'ID_{:0>4d}_{:d}.png'.format(self._entry_id, img.cacheKey())
         )
         self._list_wdgs.append(wdg)
         self._layout.addWidget(wdg)
@@ -975,9 +987,9 @@ class GroupImage(QtWidgets.QWidget):
         self._list_links = []
         self._list_img = []
 
-    def get_link_str(self):
+    def get_list_links(self):
         """ return the image links """
-        return ','.join(self._list_links)
+        return self._list_links
 
     def get_list_img(self):
         return self._list_img
