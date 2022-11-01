@@ -341,9 +341,7 @@ class DialogSearch(QtWidgets.QDialog):
         self.setMinimumWidth(750)
         self.setWindowTitle('Search Entries')
         self.setWindowFlags(QtCore.Qt.Window)
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
+        self._1st_launch = True
 
         self.btnSearch = QtWidgets.QPushButton('Search')
         self.comboFields = QtWidgets.QComboBox()
@@ -387,6 +385,14 @@ class DialogSearch(QtWidgets.QDialog):
         thisLayout.addLayout(btnLayout)
         self.setLayout(thisLayout)
 
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
+
 
 class DialogBibKey(QtWidgets.QDialog):
 
@@ -399,9 +405,8 @@ class DialogBibKey(QtWidgets.QDialog):
         self.btnSearch.setShortcut(QtCore.Qt.Key_Return)
         self.inpSearchWord = QtWidgets.QLineEdit()
         self.resize(QtCore.QSize(400, 600))
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
+        self._1st_launch = True
+
         barLayout = QtWidgets.QHBoxLayout()
         barLayout.addWidget(self.inpSearchWord)
         barLayout.addWidget(self.btnSearch)
@@ -446,6 +451,14 @@ class DialogBibKey(QtWidgets.QDialog):
         self.current_page = p
         self.prevPage.setDisabled(p <= 1)
 
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
+
 
 class DialogViewImg(QtWidgets.QDialog):
 
@@ -453,9 +466,8 @@ class DialogViewImg(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle('View Image')
         self.setWindowFlags(QtCore.Qt.Window)
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
+        self._1st_launch = True
+
         self.btnPrev = QtWidgets.QPushButton(
                 QIcon(path_join(ROOT, 'icon', 'img_prev.png')), '')
         self.btnNext = QtWidgets.QPushButton(
@@ -485,6 +497,14 @@ class DialogViewImg(QtWidgets.QDialog):
         self.btnPrev.clicked.connect(self.prev)
         self.btnNext.clicked.connect(self.next)
 
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
+
     def load_imgs(self, list_img):
         self._list_img = list_img
         if list_img:
@@ -492,6 +512,8 @@ class DialogViewImg(QtWidgets.QDialog):
             self.show_img(list_img[0])
         else:
             self.labelImg.clear()
+        move_to_center(
+                self, QtWidgets.QApplication.desktop().screenGeometry().center())
 
     def show_img(self, img):
         # get size of the image
@@ -528,9 +550,7 @@ class DialogDelImg(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Delete Images')
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
+        self._1st_launch = True
 
         self.btnDel = QtWidgets.QPushButton('Delete')
         self.btnCancel = QtWidgets.QPushButton('Cancel')
@@ -553,6 +573,14 @@ class DialogDelImg(QtWidgets.QDialog):
         thisLayout.addLayout(btnLayout)
         self.setLayout(thisLayout)
 
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
+
 
 class DialogPatchBibkey(QtWidgets.QDialog):
     """ Prevent user to save with blank bibkey"""
@@ -560,10 +588,7 @@ class DialogPatchBibkey(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Add a bibkey')
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
-
+        self._1st_launch = True
         label = QtWidgets.QLabel('Current entry cannot be saved without a valid'
                                  'bibkey. Please input the bibkey here!')
         self.inpKey = QtWidgets.QLineEdit()
@@ -573,6 +598,14 @@ class DialogPatchBibkey(QtWidgets.QDialog):
         thisLayout.addWidget(self.inpKey)
         thisLayout.addWidget(self.btnOk)
         self.setLayout(thisLayout)
+
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
 
     def reject(self):
         """ Forbid user from closing of the dialog window until a valid bibkey
@@ -586,9 +619,7 @@ class DialogNewEntry(QtWidgets.QDialog):
         super().__init__(parent)
         self.setMinimumWidth(300)
         self.setWindowTitle('Insert New Entry')
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
+        self._1st_launch = True
 
         self.editBibkey = QtWidgets.QLineEdit()
         self.btnOk = QtWidgets.QPushButton('Insert')
@@ -609,6 +640,14 @@ class DialogNewEntry(QtWidgets.QDialog):
         self.btnOk.clicked.connect(self.accept)
         self.btnCancel.clicked.connect(self.reject)
 
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
+
 
 class DialogChangeBibkey(QtWidgets.QDialog):
 
@@ -616,9 +655,7 @@ class DialogChangeBibkey(QtWidgets.QDialog):
         super().__init__(parent)
         self.setMinimumWidth(300)
         self.setWindowTitle('Change Current Bibkey')
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
+        self._1st_launch = True
 
         self.oldBibkey = QtWidgets.QLineEdit()
         self.oldBibkey.setReadOnly(True)
@@ -646,6 +683,14 @@ class DialogChangeBibkey(QtWidgets.QDialog):
         self.btnOk.clicked.connect(self.accept)
         self.btnCancel.clicked.connect(self.reject)
 
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
+
 
 class DialogAddImg(QtWidgets.QDialog):
 
@@ -653,9 +698,7 @@ class DialogAddImg(QtWidgets.QDialog):
         super().__init__(parent)
         self.setMinimumWidth(400)
         self.setWindowTitle('Add Image')
-        # put in in center of screen
-        scr = QtWidgets.QApplication.desktop().screenGeometry()
-        self.move(scr.center() - self.rect().center())
+        self._1st_launch = True
 
         self._clipboard = clipboard
         self.img = QImage()
@@ -672,6 +715,14 @@ class DialogAddImg(QtWidgets.QDialog):
         self.setLayout(thisLayout)
         self.btnOk.clicked.connect(self.accept)
         self.btnCancel.clicked.connect(self.reject)
+
+    def showEvent(self, ev):
+        if self._1st_launch:
+            # put in in center of screen
+            scr = QtWidgets.QApplication.desktop().screenGeometry()
+            move_to_center(self, scr.center())
+            self._1st_launch = False
+        ev.accept()
 
     def keyPressEvent(self, ev):
         if ev.key() == QtCore.Qt.Key_V and ev.modifiers() == QtCore.Qt.ControlModifier:
@@ -1274,6 +1325,15 @@ def q_save_entry(obj):
                                        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                                        QtWidgets.QMessageBox.Yes)
     return q == QtWidgets.QMessageBox.Yes
+
+
+def move_to_center(qdial, cntr):
+    """ Move QDialog to screen center
+    :argument
+        qdial: QDialog          dialog object
+        cntr: QRect             Screen center position
+    """
+    qdial.move(cntr - qdial.rect().center())
 
 
 def launch():
