@@ -460,6 +460,8 @@ class DialogViewImg(QtWidgets.QDialog):
         self._current_idx = 0
         self._list_img = None
         self.labelImg = QtWidgets.QLabel()
+        self.labelImg.setAlignment(QtCore.Qt.AlignHCenter |
+                                   QtCore.Qt.AlignVCenter)
         area = QtWidgets.QScrollArea()
         area.setWidgetResizable(True)
         area.setWidget(self.labelImg)
@@ -475,6 +477,7 @@ class DialogViewImg(QtWidgets.QDialog):
     def load_imgs(self, list_img):
         self._list_img = list_img
         if list_img:
+            self._current_idx = 0
             self.show_img(list_img[0])
         else:
             self.labelImg.clear()
