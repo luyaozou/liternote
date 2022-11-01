@@ -387,6 +387,7 @@ class DialogBibKey(QtWidgets.QDialog):
         self.setWindowFlags(QtCore.Qt.Window)
         self.btnSearch = QtWidgets.QPushButton('Search')
         self.btnSearch.setFixedWidth(100)
+        self.btnSearch.setShortcut(QtCore.Qt.Key_Return)
         self.inpSearchWord = QtWidgets.QLineEdit()
         self.resize(QtCore.QSize(400, 600))
         # put in in center of screen
@@ -421,6 +422,7 @@ class DialogBibKey(QtWidgets.QDialog):
         btnLayout.addWidget(self.btnClose)
         self.btnLoad.clicked.connect(self.accept)
         self.btnClose.clicked.connect(self.reject)
+        self.listEntry.itemDoubleClicked.connect(self.btnLoad.click)
 
         thisLayout = QtWidgets.QVBoxLayout()
         thisLayout.setAlignment(QtCore.Qt.AlignTop)
