@@ -13,12 +13,13 @@ from os import remove as os_remove
 import sys
 
 ROOT = dirname(realpath(__file__))
+DB = 'liternote.db'
 
 COLOR_BLUE = '#0066cc'
 COLOR_RED = '#cc0000'
 
 FIELDS = ('title', 'author', 'thesis', 'hypothesis', 'method', 'finding', 'comment')
-GENRES = ('Code', 'Experiment', 'Instrum', 'Theory', 'Review')
+GENRES = ('Astronomy', 'Code', 'Experiment', 'Instrum', 'Theory', 'Review')
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -34,8 +35,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowIcon(QIcon('icon/icon_literature.png'))
         self.showMaximized()
         self.clipboard = QtWidgets.QApplication.clipboard()
-        self.conn, self.cursor = create_or_open_db(path_join(ROOT,
-                                                             'liternote.db'))
+        self.conn, self.cursor = create_or_open_db(path_join(ROOT, DB))
         self.dialogSearch = DialogSearch(parent=self)
         self.dialogBibKey = DialogBibKey(parent=self)
         self.dialogAddImg = DialogAddImg(self.clipboard, parent=self)
@@ -147,13 +147,13 @@ class MainWindow(QtWidgets.QMainWindow):
             id_ = db_bibkey_id(self.cursor, new_bibkey)
             # if duplicate, there will be an id_, else None
             if isinstance(id_, type(None)):
-                db_insert_new_bibkey(self.conn, self.cursor, new_bibkey)
+                id_ = db_insert_new_bibkey(self.conn, self.cursor, new_bibkey)
                 # before add new entry, ask if save the current one
                 if self.mw.is_edited:
                     if q_save_entry(self):
                         self.save_entry()
                 self.mw.clear_all()
-                self.mw.inpBibKey.setText(new_bibkey)
+                self.mw.new_bibkey(id_, new_bibkey)
             else:
                 msg(title='Error', style='critical',
                     context='Bibkey already exists in database')
@@ -164,26 +164,26 @@ class MainWindow(QtWidgets.QMainWindow):
         entry_dict, tags = self.mw.getEntry()
         # check if bibkey is empty
         if entry_dict['bibkey']:
-            save_img_to_disk(entry_dict['bibkey'], self.mw.gpImage.get_list_img())
-            id_ = db_bibkey_id(self.cursor, entry_dict['bibkey'])
-            if id_:     # bibkey already exists
-                try:
-                    db_update_entry(self.conn, self.cursor, id_, entry_dict,
-                                    tags=tags)
-                    self.refresh_all_tags()
-                    # now everything is saved, restore edit status
-                    self.mw.is_edited = False
-                except sqlite3.Error as err:
-                    msg(title='Error', style='critical', context=str(err))
-            else:
-                try:
-                    db_insert_entry(self.conn, self.cursor, entry_dict,
-                                    tags=tags)
-                    self.refresh_all_tags()
-                    # now everything is saved, restore edit status
-                    self.mw.is_edited = False
-                except sqlite3.Error as err:
-                    msg(title='Error', style='critical', context=str(err))
+            # id_ = db_bibkey_id(self.cursor, entry_dict['bibkey'])
+            # if id_:     # bibkey already exists
+            try:
+                db_update_entry(self.conn, self.cursor, entry_dict,
+                                tags=tags)
+                save_img_to_disk(entry_dict['img_pairs'])
+                self.refresh_all_tags()
+                # now everything is saved, restore edit status
+                self.mw.is_edited = False
+            except sqlite3.Error as err:
+                msg(title='Error', style='critical', context=str(err))
+            # else:
+            #     try:
+            #         db_insert_entry(self.conn, self.cursor, entry_dict,
+            #                         tags=tags)
+            #         self.refresh_all_tags()
+            #         # now everything is saved, restore edit status
+            #         self.mw.is_edited = False
+            #     except sqlite3.Error as err:
+            #         msg(title='Error', style='critical', context=str(err))
         else:
             self.dialogPatchKey.exec()
 
@@ -648,6 +648,7 @@ class MainWidget(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.is_edited = False
+        self._entry_id = 0
         self.inpBibKey = QtWidgets.QLineEdit()
         self.inpBibKey.setDisabled(True)    # only for display, can't edit directly
         self.btnChangeBibkey = QtWidgets.QPushButton('Update Bibkey')
@@ -756,8 +757,14 @@ class MainWidget(QtWidgets.QWidget):
         """
         self.is_edited = True
 
+    def new_bibkey(self, id_, bibkey):
+        self._entry_id = id_
+        self.gpImage._entry_id = id_
+        self.inpBibKey.setText(bibkey)
+
     def clear_all(self):
         """ Clear all contents """
+        self._entry_id = 0
         self.editTitle.clear()
         self.editThesis.clear()
         self.editComment.clear()
@@ -771,6 +778,7 @@ class MainWidget(QtWidgets.QWidget):
     def getEntry(self):
         """ Get entry information """
         a_dict = {
+            'id': self._entry_id,
             'bibkey': self.inpBibKey.text().strip(),
             'genre': self.comboGenre.currentText(),
             'title': self.editTitle.toPlainText(),
@@ -780,13 +788,16 @@ class MainWidget(QtWidgets.QWidget):
             'method': self.editMethod.toPlainText(),
             'finding': self.editFinding.toPlainText(),
             'comment': self.editComment.toPlainText(),
-            'img_linkstr': self.gpImage.get_link_str()
+            'img_linkstr': self.gpImage.get_link_str(),
+            'img_pairs': zip(self.gpImage.get_link_str(),
+                             self.gpImage.get_list_img())
         }
         tags = self.tagBox.dispTags.tags()
         return a_dict, tags
 
     def loadEntry(self, a_dict, tags):
         """ Load entry information """
+        self._entry_id = a_dict['id']
         self.inpBibKey.setText(a_dict['bibkey'])
         self.comboGenre.setCurrentText(a_dict['genre'])
         self.editTitle.setText(a_dict['title'])
@@ -857,6 +868,7 @@ class GroupImage(QtWidgets.QWidget):
         self._list_img = []
         self._list_wdgs = []
         self._list_links = []
+        self._entry_id = 0
         self.setLayout(self._layout)
         self.img_width = 100
 
@@ -897,7 +909,9 @@ class GroupImage(QtWidgets.QWidget):
         wdg = QtWidgets.QLabel()
         wdg.setPixmap(QPixmap(img.scaledToWidth(self.img_width)))
         self._list_img.append(img)
-        self._list_links.append('') # new image from clipboard does not have link yet
+        self._list_links.append(
+            'ID_{:4>d}_{:d}.png'.format(self._entry_id, img.cacheKey())
+        )
         self._list_wdgs.append(wdg)
         self._layout.addWidget(wdg)
         self.adjustSize()
@@ -1254,7 +1268,9 @@ def create_or_open_db(filename):
     cursor.execute(sql)
     
     sql = """ CREATE TABLE IF NOT EXISTS tags (
-        bibkey TEXT UNIQUE NOT NULL,
+        keyid INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        id INTEGER NOT NULL,
+        bibkey TEXT NOT NULL,
         tag TEXT NOT NULL
     );"""
     cursor.execute(sql)
@@ -1303,10 +1319,19 @@ def create_or_open_db(filename):
 
 
 def db_insert_new_bibkey(conn, c, bibkey):
+    """ Insert new bibkey (and create entry)
+    :argument
+        conn:           db connection
+        c:              db cursor
+        bibkey: str     new bibkey
+    :returns
+        id_: int        new entry id
+    """
     # title & author are not null, so need to give some default value
     c.execute("INSERT INTO note (bibkey, title, author) VALUES (?, ?, ?)",
               (bibkey, ' ', ' '))
     conn.commit()
+    return db_bibkey_id(c, bibkey)
 
 
 def db_insert_entry(conn, c, entry_dict, tags=None):
@@ -1319,15 +1344,19 @@ def db_insert_entry(conn, c, entry_dict, tags=None):
     c.execute(sql, tuple(entry_dict[field] for field in fields))
     conn.commit()
 
+    # get id
+    id_ = db_bibkey_id(c, entry_dict['bibkey'])
     if tags:
-        sql = """ INSERT INTO tags (bibkey, tag) VALUES ({:s}, ?) """.format(entry_dict['bibkey'])
+        sql = """ INSERT INTO tags (id, bibkey, tag) 
+        VALUES ({:d}, {:s}, ?) """.format(id_, entry_dict['bibkey'])
         c.executemany(sql, ((tag,) for tag in tags))
         conn.commit()
 
 
-def db_update_entry(conn, c, id_, entry_dict, tags=None):
+def db_update_entry(conn, c, entry_dict, tags=None):
     """ Update entry in database """
 
+    id_ = entry_dict['id']
     fields = ['author', 'title', 'genre', 'thesis', 'hypothesis',
               'method', 'finding', 'comment', 'img_linkstr']
     sql = """ UPDATE note SET {:s} WHERE id = (?) 
@@ -1335,19 +1364,32 @@ def db_update_entry(conn, c, id_, entry_dict, tags=None):
     c.execute(sql, tuple(list(entry_dict[field] for field in fields) + [id_]))
     conn.commit()
 
-    # remove old tags
-    c.execute("DELETE FROM tags WHERE bibkey = (?)", (entry_dict['bibkey'],))
-    if tags:
-        # write in new tags
-        sql = """ INSERT INTO tags (bibkey, tag) VALUES ('{:s}', ?) """.format(entry_dict['bibkey'])
-        c.executemany(sql, ((tag,) for tag in tags))
-        conn.commit()
+    c.execute("SELECT tag FROM tags WHERE id = (?)", (id_, ))
+    old_tags = list(x[0] for x in c.fetchall())
+    # add the rest of new tags
+    for tag in tags:
+        if tag in old_tags:
+            pass
+        else:
+            c.execute('INSERT INTO tags (id, bibkey, tag) VALUES (?, ?, ?)',
+                      (id_, entry_dict['bibkey'], tag))
+    # remove old tags that do not exist in tags any more
+    for old_tag in old_tags:
+        if old_tag in tags:
+            # old tag still exist, keep
+            pass
+        else:
+            c.execute("DELETE FROM tag WHERE id = (?) AND tag = (?)",
+                      (id_, old_tag))
+    conn.commit()
 
 
 def db_replace_bibkey(conn, c, old_key, new_key):
     """ Replace old bibkey with new bibkey """
     id_ = db_bibkey_id(c, old_key)
     sql = 'UPDATE note SET bibkey = (?) WHERE id = (?)'
+    c.execute(sql, (new_key, id_))
+    sql = 'UPDATE tags SET bibkey = (?) WHERE id = (?)'
     c.execute(sql, (new_key, id_))
     conn.commit()
 
@@ -1364,8 +1406,8 @@ def db_bibkey_id(c, bibkey):
 
 def db_select_last_entry(c):
     """ Seletc the last entry from database """
-    fields = ['bibkey', 'title', 'author', 'genre', 'thesis', 'hypothesis',
-              'method', 'finding', 'comment', 'img_linkstr']
+    fields = ['id', 'bibkey', 'title', 'author', 'genre', 'thesis',
+              'hypothesis', 'method', 'finding', 'comment', 'img_linkstr']
     sql = "SELECT {:s} FROM note ORDER BY id DESC LIMIT 1".format(','.join(fields))
     c.execute(sql)
     result = c.fetchall()
@@ -1379,8 +1421,8 @@ def db_select_last_entry(c):
 
     # get tags
     if a_dict:
-        c.execute("SELECT tag FROM tags WHERE bibkey = (?) ORDER BY tag ASC",
-                  (a_dict['bibkey'], ))
+        c.execute("SELECT tag FROM tags WHERE id = (?) ORDER BY tag ASC",
+                  (a_dict['id'], ))
         tags = tuple(r[0] for r in c.fetchall())
     else:
         tags = ()
@@ -1395,16 +1437,16 @@ def db_select_entry(c, bibkey):
     :returns
         entry_dict: dict
     """
-    fields = ['bibkey', 'title', 'author', 'genre', 'thesis', 'hypothesis',
-              'method', 'finding', 'comment', 'img_linkstr']
+    fields = ['id', 'bibkey', 'title', 'author', 'genre', 'thesis',
+              'hypothesis', 'method', 'finding', 'comment', 'img_linkstr']
     sql = "SELECT {:s} FROM note WHERE bibkey = (?)".format(','.join(fields))
     c.execute(sql, (bibkey,))
     result = c.fetchall()[0]
     a_dict = {}
     for field, value in zip(fields, result):
         a_dict[field] = value
-    c.execute("SELECT tag FROM tags WHERE bibkey = (?) ORDER BY tag ASC",
-              (a_dict['bibkey'],))
+    c.execute("SELECT tag FROM tags WHERE id = (?) ORDER BY tag ASC",
+              (a_dict['id'],))
     tags = tuple(r[0] for r in c.fetchall())
     return a_dict, tags
 
@@ -1490,16 +1532,15 @@ def db_search_bibkey(c, keyword, n_per_page, page=1):
     return list(res[0] for res in c.fetchall())
 
 
-def save_img_to_disk(bibkey, list_img):
+def save_img_to_disk(img_pairs):
     """ Save image to disk
     :argument
         img_pairs:  [(link, QImage)]
     """
 
-    for img in list_img:
-        link = '.'.join(['{:s}_{:d}'.format(bibkey, img.cacheKey()), 'png'])
-        # check if this link is already on disk
+    for link, img in img_pairs:
         filename = path_join(ROOT, 'img', link)
+        # check if this link is already on disk
         if isfile(filename):
             pass
         else:
