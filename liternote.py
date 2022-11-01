@@ -84,6 +84,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # load the last entry
         self.mw.loadEntry(*db_select_last_entry(self.cursor))
         self.refresh_all_tags()
+        # load the first page of the full bibkey list into the bibkey dialog
+        self.search_bibkey()
 
     def closeEvent(self, ev):
         # ask if save the last operation
@@ -330,6 +332,9 @@ class DialogSearch(QtWidgets.QDialog):
         self.setMinimumWidth(750)
         self.setWindowTitle('Search Entries')
         self.setWindowFlags(QtCore.Qt.Window)
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
 
         self.btnSearch = QtWidgets.QPushButton('Search')
         self.comboFields = QtWidgets.QComboBox()
@@ -383,7 +388,10 @@ class DialogBibKey(QtWidgets.QDialog):
         self.btnSearch = QtWidgets.QPushButton('Search')
         self.btnSearch.setFixedWidth(100)
         self.inpSearchWord = QtWidgets.QLineEdit()
-        self.resize(QtCore.QSize(300, 500))
+        self.resize(QtCore.QSize(400, 600))
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
         barLayout = QtWidgets.QHBoxLayout()
         barLayout.addWidget(self.inpSearchWord)
         barLayout.addWidget(self.btnSearch)
@@ -434,6 +442,9 @@ class DialogViewImg(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle('View Image')
         self.setWindowFlags(QtCore.Qt.Window)
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
         self.btnPrev = QtWidgets.QPushButton(
                 QIcon(path_join(ROOT, 'icon', 'img_prev.png')), '')
         self.btnNext = QtWidgets.QPushButton(
@@ -503,6 +514,9 @@ class DialogDelImg(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Delete Images')
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
 
         self.btnDel = QtWidgets.QPushButton('Delete')
         self.btnCancel = QtWidgets.QPushButton('Cancel')
@@ -532,6 +546,9 @@ class DialogPatchBibkey(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Add a bibkey')
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
 
         label = QtWidgets.QLabel('Current entry cannot be saved without a valid'
                                  'bibkey. Please input the bibkey here!')
@@ -555,6 +572,10 @@ class DialogNewEntry(QtWidgets.QDialog):
         super().__init__(parent)
         self.setMinimumWidth(300)
         self.setWindowTitle('Insert New Entry')
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
+
         self.editBibkey = QtWidgets.QLineEdit()
         self.btnOk = QtWidgets.QPushButton('Insert')
         self.btnCancel = QtWidgets.QPushButton('Cancel')
@@ -581,6 +602,10 @@ class DialogChangeBibkey(QtWidgets.QDialog):
         super().__init__(parent)
         self.setMinimumWidth(300)
         self.setWindowTitle('Change Current Bibkey')
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
+
         self.oldBibkey = QtWidgets.QLineEdit()
         self.oldBibkey.setReadOnly(True)
         self.editNewBibkey = QtWidgets.QLineEdit()
@@ -614,6 +639,10 @@ class DialogAddImg(QtWidgets.QDialog):
         super().__init__(parent)
         self.setMinimumWidth(400)
         self.setWindowTitle('Add Image')
+        # put in in center of screen
+        scr = QtWidgets.QApplication.desktop().screenGeometry()
+        self.move(scr.center() - self.rect().center())
+
         self._clipboard = clipboard
         self.img = QImage()
         self.labelImg = QtWidgets.QLabel()
